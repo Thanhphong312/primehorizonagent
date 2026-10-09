@@ -6,12 +6,20 @@ import base64
 import io
 import logging
 import re
+import threading
 from dataclasses import dataclass
 
 import requests
 from PIL import Image, ImageOps
 
 logger = logging.getLogger(__name__)
+
+# File in POD rất lớn (vd 4500×5400 RGBA ≈ 100 MB khi giải nén, chuyển mode lại ×2). Nhiều ảnh giải nén CÙNG LÚC
+# (2 lượt phân tích + ảnh thu nhỏ trên trang quản lý) từng làm service vượt MemoryMax ⇒ bị OOM-kill giữa lượt.
+# ⇒ giải nén tuần tự từng ảnh; tải mạng vẫn song song.
+_DECODE_LOCK = threading.BoundedSemaphore(1)
+MAX_PIXELS = 120_000_000          # > 120 MP coi như file lỗi / bom giải nén
+Image.MAX_IMAGE_PIXELS = MAX_PIXELS
 
 _DRIVE_ID_RE = re.compile(r"(?:/file/d/|[?&]id=)([A-Za-z0-9_-]{10,})")
 
@@ -58,13 +66,26 @@ def load_image(url: str, *, max_px: int, max_bytes: int, timeout: int,
     except requests.RequestException as exc:
         raise ImageLoadError(f"Không tải được ảnh: {exc}") from exc
 
+    raw = buf.getvalue()
+    del buf
+    with _DECODE_LOCK:
+        return _encode(url, raw, max_px=max_px, jpeg_only=jpeg_only)
+
+
+def _encode(url: str, raw: bytes, *, max_px: int, jpeg_only: bool) -> LoadedImage:
     try:
-        img = Image.open(io.BytesIO(buf.getvalue()))
+        img = Image.open(io.BytesIO(raw))
+        if img.width * img.height > MAX_PIXELS:
+            raise ImageLoadError(f"Ảnh quá lớn ({img.width}×{img.height})")
+        if img.format == "JPEG":
+            img.draft("RGB", (max_px, max_px))      # JPEG: giải nén thẳng ở cỡ nhỏ, tốn ít RAM
+        img.thumbnail((max_px, max_px))             # thu nhỏ TRƯỚC khi xoay / đổi mode để đỡ RAM
         img = ImageOps.exif_transpose(img)
+    except ImageLoadError:
+        raise
     except Exception as exc:  # noqa: BLE001 — mọi lỗi decode đều là "không phải ảnh"
         raise ImageLoadError(f"File không phải ảnh hợp lệ: {exc}") from exc
 
-    img.thumbnail((max_px, max_px))
     out = io.BytesIO()
     # PNG giữ nền trong suốt của file thiết kế (nền trong suốt quyết định "in gì");
     # JPEG cho mockup / ảnh chụp để nhẹ.

@@ -44,7 +44,7 @@ Hàng chờ nằm trong RAM: PrimeAgent restart thì mất job đang chờ, như
 ### Server đang chạy (142.93.2.252 — check-trademark): venv + systemd, không Docker
 
 - Code: `/var/www/primeagent` (clone repo này) · env: `/var/www/primeagent/.env`
-- Service: `primeagent` (gunicorn `127.0.0.1:5300`, `-w 1 --threads 4`, `MemoryMax=700M`)
+- Service: `primeagent` (gunicorn `127.0.0.1:5300`, `-w 1 --threads 4`, `MemoryMax=1G`)
 - Log: `/var/log/primeagent/{access,error}.log`
 - Ra ngoài qua nginx HTTPS: `https://agent.primehorizon.studio` (site nginx `primeagent`, chứng chỉ Let's Encrypt tự gia hạn; cổng 5300 không mở)
 
