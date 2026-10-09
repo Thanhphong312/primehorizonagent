@@ -596,3 +596,13 @@ def test_json_hong_qua_gateway_goi_sua_rieng():
     c = C()
     r = AnthropicProvider(settings(anthropic_base_url="https://gw"), client=c).analyze("s", [], {"type": "object"})
     assert r.data["summary"] == "đã sửa" and c.n == 2
+
+
+def test_sua_json_thieu_ngoac_dong():
+    from app.providers.base import parse_json_loose
+    # lỗi gặp thật ở #940: quên "}" đóng object item trước "]"
+    bad = ('{"items": [{"index": 1, "checks": {"print_side": {"status": "ok", "reason": "khớp nhau."}}], '
+           '"summary": "ok"}')
+    d = parse_json_loose(bad)
+    assert d["items"][0]["checks"]["print_side"]["status"] == "ok" and d["summary"] == "ok"
+    assert parse_json_loose('{"items": [{"index": 1, "checks": {}}], "summary": "thiếu cuối"')["summary"] == "thiếu cuối"

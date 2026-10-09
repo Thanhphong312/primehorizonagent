@@ -68,7 +68,40 @@ def repair_json(t: str) -> str:
                 in_str = True
             out.append(ch)
         i += 1
-    return re.sub(r",\s*([}\]])", r"\1", "".join(out))
+    return _balance(re.sub(r",\s*([}\]])", r"\1", "".join(out)))
+
+
+def _balance(t: str) -> str:
+    """Chèn ngoặc đóng bị thiếu — vd model viết ``…"}}], "summary"`` (quên đóng object item trước ``]``)."""
+    pairs = {"{": "}", "[": "]"}
+    out: list[str] = []
+    stack: list[str] = []
+    in_str = esc = False
+    for ch in t:
+        if in_str:
+            out.append(ch)
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in pairs:
+            stack.append(pairs[ch])
+        elif ch in "}]":
+            # đóng thiếu: còn ngoặc khác đang mở phía trên ⇒ đóng hộ cho tới đúng loại
+            while stack and stack[-1] != ch and ch in stack:
+                out.append(stack.pop())
+            if stack and stack[-1] == ch:
+                stack.pop()
+            else:
+                continue          # ngoặc đóng thừa ⇒ bỏ
+        out.append(ch)
+    out.extend(reversed(stack))
+    return "".join(out)
 
 
 def parse_json_loose(text: str) -> dict[str, Any]:
@@ -80,12 +113,19 @@ def parse_json_loose(text: str) -> dict[str, Any]:
         t = t.split("\n", 1)[1] if "\n" in t else t
         t = t.rsplit("```", 1)[0]
     a, b = t.find("{"), t.rfind("}")
-    if a >= 0 and b > a:
-        t = t[a:b + 1]
-    try:
-        data = json.loads(t)
-    except json.JSONDecodeError:
-        data = json.loads(repair_json(t))
+    # cut = tới "}" cuối (bỏ chữ thừa phía sau); full = tới hết chuỗi (JSON bị cụt ngoặc cuối).
+    full = t[a:] if a >= 0 else t
+    cut = t[a:b + 1] if a >= 0 and b > a else full
+    err: json.JSONDecodeError | None = None
+    data = None
+    for c in (cut, full, repair_json(full), repair_json(cut)):   # nguyên văn trước, bản sửa sau
+        try:
+            data = json.loads(c)
+            break
+        except json.JSONDecodeError as exc:
+            err = err or exc
+    if data is None:
+        raise err
     if not isinstance(data, dict):
         raise json.JSONDecodeError("không phải object", t, 0)
     return data
