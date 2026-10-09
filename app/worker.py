@@ -19,8 +19,9 @@ logger = logging.getLogger(__name__)
 
 
 class Worker:
-    def __init__(self, settings, *, client=None, provider=None, loader=load_image):
+    def __init__(self, settings, *, client=None, provider=None, loader=load_image, store=None):
         self.settings = settings
+        self.store = store
         self._client = client
         self._provider = provider
         self._loader = loader
@@ -34,11 +35,9 @@ class Worker:
             self._client = PrimeClient(self.settings)
         return self._client
 
-    @property
-    def provider(self):
-        if self._provider is None:
-            self._provider = get_provider(self.settings)
-        return self._provider
+    def current_settings(self):
+        """Env + cài đặt trên trang quản lý — đọc lại mỗi job nên đổi key/model có hiệu lực ngay."""
+        return self.store.effective(self.settings) if self.store else self.settings
 
     def submit(self, fulfillment_id: int) -> bool:
         """False nếu lượt này đang được phân tích (bỏ job trùng)."""
@@ -67,13 +66,16 @@ class Worker:
             # Không lấy được dữ liệu ⇒ KHÔNG gửi kết quả: backend sẽ tự gửi lại job sau.
             logger.warning("bundle %s: %s", fulfillment_id, exc)
             return {}
+        settings = self.current_settings()
+        name = getattr(self._provider, "name", None) or settings.ai_provider
         try:
-            payload = analyze(bundle, self.provider, self.settings, loader=self._loader)
+            provider = self._provider or get_provider(settings)
+            payload = analyze(bundle, provider, settings, loader=self._loader)
         except ProviderError as exc:
-            payload = failure_payload(str(exc), getattr(self._provider, "name", None))
+            payload = failure_payload(str(exc), name)
         except Exception as exc:  # noqa: BLE001
             logger.exception("analyze %s", fulfillment_id)
-            payload = failure_payload(f"{type(exc).__name__}: {exc}", getattr(self._provider, "name", None))
+            payload = failure_payload(f"{type(exc).__name__}: {exc}", name)
         try:
             self.client.post_result(fulfillment_id, payload)
         except Exception as exc:  # noqa: BLE001

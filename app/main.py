@@ -8,36 +8,35 @@ from __future__ import annotations
 
 import hmac
 import logging
-import os
 
 from flask import Flask, jsonify, request
 
 from app.config import get_settings
+from app.store import Store
+from app.web import init_ui
 from app.worker import Worker
 
 
-def create_app(settings=None, worker: Worker | None = None) -> Flask:
+def create_app(settings=None, worker: Worker | None = None, store: Store | None = None) -> Flask:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = settings or get_settings()
     if not settings.agent_inbound_key:
         raise RuntimeError("Thiếu AGENT_INBOUND_KEY")
     app = Flask(__name__)
-    app.config["WORKER"] = worker or Worker(settings)
+    store = store or Store(settings.data_dir)
+    app.config["WORKER"] = worker or Worker(settings, store=store)
+    init_ui(app, settings, store)
 
     def authorized() -> bool:
         got = request.headers.get("X-Agent-Key", "")
         return bool(got) and hmac.compare_digest(got, settings.agent_inbound_key)
 
-    @app.get("/")
-    def index():
-        return jsonify(service="PrimeAgent — AI kiểm tra fulfill", ok=True, provider=settings.ai_provider,
-                       ai_key_set=bool(os.getenv("ANTHROPIC_API_KEY" if settings.ai_provider == "anthropic"
-                                                 else "OPENAI_API_KEY")),
-                       endpoints=["GET /health", "POST /jobs (X-Agent-Key)"])
-
     @app.get("/health")
     def health():
-        return jsonify(ok=True, provider=settings.ai_provider, inflight=app.config["WORKER"].inflight())
+        eff = store.effective(settings)
+        key = eff.anthropic_api_key if eff.ai_provider == "anthropic" else eff.openai_api_key
+        return jsonify(ok=True, provider=eff.ai_provider, ai_key_set=bool(key),
+                       inflight=app.config["WORKER"].inflight())
 
     @app.post("/jobs")
     def jobs():

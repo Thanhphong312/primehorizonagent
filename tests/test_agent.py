@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 from types import SimpleNamespace
 
 import pytest
@@ -19,7 +20,7 @@ from app.worker import Worker
 
 def settings(**kw):
     base = dict(prime_api_base="http://prime", prime_service_key="sk", agent_inbound_key="ak",
-                ai_provider="anthropic", openai_model="gpt-x", max_images=16)
+                ai_provider="anthropic", openai_model="gpt-x", max_images=16, data_dir=tempfile.mkdtemp())
     base.update(kw)
     return Settings(**base)
 
@@ -287,7 +288,155 @@ def test_rules_file_in_la_mockup_hoac_trung_link_mockup():
     assert [x["status"] for x in run_rules(b)] == ["error"]
 
 
-def test_trang_goc(monkeypatch):
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    r = create_app(settings(), worker=object()).test_client().get("/").get_json()
-    assert r["ok"] is True and r["ai_key_set"] is False
+def test_trang_goc_la_trang_quan_ly_va_health_bao_key():
+    app = create_app(settings(), worker=SimpleNamespace(inflight=lambda: 0))
+    c = app.test_client()
+    r = c.get("/")
+    assert r.status_code == 200 and b"PrimeAgent" in r.data
+    assert c.get("/health").get_json()["ai_key_set"] is False
+
+
+# ── store (cài đặt trên trang) ──
+
+def test_store_luu_che_key_va_ghi_de_env(tmp_path):
+    from app.store import Store, mask
+    st = Store(str(tmp_path))
+    base = settings(anthropic_api_key="env-key-aaaaaaaaaaaa", anthropic_model="claude-opus-5-5")
+    assert st.effective(base).anthropic_api_key == "env-key-aaaaaaaaaaaa"
+    st.update({"anthropic_api_key": "sk-ant-page-1234567890", "anthropic_model": "claude-sonnet-5-5", "openai_model": None})
+    eff = st.effective(base)
+    assert eff.anthropic_api_key == "sk-ant-page-1234567890" and eff.anthropic_model == "claude-sonnet-5-5"
+    pub = st.public(base)
+    assert pub["anthropic_api_key"]["value"] == mask("sk-ant-page-1234567890") and "1234567890" not in pub["anthropic_api_key"]["value"]
+    assert pub["anthropic_api_key"]["source"] == "page"
+    st.update({"anthropic_model": ""})          # xoá ⇒ về env
+    assert st.effective(base).anthropic_model == "claude-opus-5-5"
+    assert (tmp_path / "settings.json").stat().st_mode & 0o077 == 0
+    with pytest.raises(ValueError):
+        st.update({"ai_provider": "gemini"})
+    assert st.secret_key() == st.secret_key()
+
+
+def test_worker_dung_cai_dat_tren_trang(tmp_path):
+    from app.store import Store
+    st = Store(str(tmp_path))
+    st.update({"ai_provider": "openai", "openai_api_key": "k"})
+    c = FakeClient(bundle())
+    w = Worker(settings(), client=c, store=st, loader=lambda *a, **k: IMG)
+    assert w.current_settings().ai_provider == "openai"
+    st.update({"ai_provider": "anthropic", "anthropic_api_key": ""})
+    w.process(812)    # không có key anthropic ⇒ báo thất bại rõ ràng, không crash
+    assert c.posted[0][1]["status_code"] == schema.FAILED and "API key" in c.posted[0][1]["error"]
+
+
+def test_anthropic_base_url_bo_beta_fallback():
+    c = FakeAnthropic(_anthropic_resp())
+    AnthropicProvider(settings(anthropic_base_url="https://gw.example"), client=c).analyze("s", [], {})
+    assert "betas" not in c.kw and "fallbacks" not in c.kw
+
+
+# ── trang quản lý ──
+
+class FakeResp:
+    def __init__(self, status, body):
+        self.status_code, self._b = status, body
+
+    def json(self):
+        return self._b
+
+
+class FakeBackend:
+    """Giả backend PrimeHorizon: login, refresh, các route /api/agent/*."""
+
+    def __init__(self, role="admin"):
+        self.role, self.calls, self.expire_once = role, [], False
+
+    def post(self, url, json=None, headers=None, timeout=None):
+        if url.endswith("/api/auth/login"):
+            if json["password"] != "pw":
+                return FakeResp(401, {"success": False, "message": "Sai mật khẩu"})
+            return FakeResp(200, {"success": True, "data": {"access_token": "a1", "refresh_token": "r1",
+                                                            "user": {"id": 1, "username": "u", "role": self.role}}})
+        if url.endswith("/api/auth/refresh"):
+            return FakeResp(200, {"success": True, "data": {"access_token": "a2", "refresh_token": "r2"}})
+        raise AssertionError(url)
+
+    def request(self, method, url, headers=None, timeout=None, **kw):
+        self.calls.append((method, url.replace("http://prime", ""), headers["Authorization"], kw))
+        if self.expire_once and headers["Authorization"] == "Bearer a1":
+            return FakeResp(401, {"success": False})
+        if "/recheck" in url:
+            return FakeResp(200, {"success": True, "message": "Đã đưa vào hàng chờ"})
+        return FakeResp(200, {"success": True, "data": {"items": [], "total": 0}})
+
+
+@pytest.fixture
+def ui(monkeypatch):
+    be = FakeBackend()
+    import app.prime_user as pu
+    monkeypatch.setattr(pu, "requests", be)
+    app = create_app(settings(), worker=SimpleNamespace(inflight=lambda: 0))
+    return app.test_client(), be
+
+
+H = {"X-Requested-With": "primeagent"}
+
+
+def _login(c, pw="pw"):
+    return c.post("/ui/api/login", json={"username": "u", "password": pw}, headers=H)
+
+
+def test_ui_dang_nhap_va_chong_csrf(ui):
+    c, be = ui
+    assert c.get("/ui/api/me").status_code == 401
+    assert c.post("/ui/api/login", json={"username": "u", "password": "pw"}).status_code == 400   # thiếu header
+    assert _login(c, "sai").status_code == 401
+    assert _login(c).get_json()["user"]["role"] == "admin"
+    assert c.get("/ui/api/me").status_code == 200
+    assert c.put("/ui/api/settings", json={"ai_provider": "openai"}).status_code == 400            # thiếu header
+
+
+def test_ui_role_khac_khong_vao_duoc(ui):
+    c, be = ui
+    be.role = "user"
+    assert _login(c).status_code == 403
+
+
+def test_ui_fulfill_khong_sua_duoc_key(ui):
+    c, be = ui
+    be.role = "fulfill"
+    _login(c)
+    assert c.get("/ui/api/settings").status_code == 200
+    assert c.put("/ui/api/settings", json={"anthropic_api_key": "x"}, headers=H).status_code == 403
+
+
+def test_ui_luu_key_va_chuyen_tiep_backend(ui):
+    c, be = ui
+    _login(c)
+    r = c.put("/ui/api/settings", json={"anthropic_api_key": "sk-ant-abcdefghijklmnop"}, headers=H).get_json()
+    assert r["data"]["anthropic_api_key"]["set"] is True and "ijklmnop" not in r["data"]["anthropic_api_key"]["value"]
+    assert c.get("/health").get_json()["ai_key_set"] is True
+    c.get("/ui/api/fulfillments?platform=etsy&analysis=0&bogus=1")
+    method, path, auth, kw = be.calls[-1]
+    assert path == "/api/agent/fulfillments" and auth == "Bearer a1"
+    assert kw["params"] == {"platform": "etsy", "analysis": "0"}
+    res = c.post("/ui/api/analyze", json={"ids": [5, 5, 6]}, headers=H).get_json()["data"]
+    assert [x["fulfillment_id"] for x in res] == [5, 6] and all(x["ok"] for x in res)
+    assert be.calls[-1][1] == "/api/agent/fulfillments/6/recheck"
+
+
+def test_ui_token_het_han_tu_lam_moi(ui):
+    c, be = ui
+    _login(c)
+    be.expire_once = True
+    assert c.get("/ui/api/fulfillments").status_code == 200
+    assert [x[2] for x in be.calls] == ["Bearer a1", "Bearer a2"]
+    c.get("/ui/api/fulfillments")
+    assert be.calls[-1][2] == "Bearer a2"       # token mới được lưu vào phiên
+
+
+def test_ui_thumb_chan_mang_noi_bo(ui):
+    c, be = ui
+    _login(c)
+    assert c.get("/ui/api/thumb?url=http://127.0.0.1:5300/health").status_code == 422
+    assert c.get("/ui/api/thumb?url=file:///etc/passwd").status_code == 422

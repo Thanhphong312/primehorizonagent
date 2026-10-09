@@ -23,6 +23,16 @@ PrimeAgent trả 202 ngay, phân tích nền (tối đa AGENT_CONCURRENCY lượ
 Hàng chờ nằm trong RAM: PrimeAgent restart thì mất job đang chờ, nhưng backend tự gửi lại các lượt còn
 `agent_analysis = 1` quá 10 phút (tối đa 5 lần, sau đó đánh dấu `9`). Trên web có nút **Phân tích lại**.
 
+## Trang quản lý — https://agent.primehorizon.studio
+
+- Đăng nhập bằng tài khoản PrimeHorizon (chỉ **admin / fulfill**). Agent không lưu mật khẩu.
+- **Cài đặt AI**: chọn Claude / GPT, nhập API key, model, effort, base URL — lưu `data/settings.json`
+  (quyền 600, không commit), có hiệu lực ngay, **không cần sửa .env**. Chỉ admin sửa được.
+- **Lượt fulfill**: lọc theo nền tảng, nhà cung cấp, ngày, trạng thái AI, mã đơn → xem file in / mockup /
+  đơn / ticket → bấm **Phân tích** (một hoặc nhiều lượt). Đi đúng luồng thật nên kết quả lưu về đơn.
+- Đổi chế độ Thủ công / Tự động cho Etsy, TikTok ngay trên trang.
+- Chạy local qua http: đặt `AGENT_DEV=1` (cookie phiên không bật Secure).
+
 ## Cài đặt
 
 ### Server đang chạy (142.93.2.252 — check-trademark): venv + systemd, không Docker
@@ -55,8 +65,8 @@ docker compose up -d --build
 curl http://localhost:5300/health
 ```
 
-Biến bắt buộc: `PRIME_API_BASE`, `PRIME_SERVICE_KEY`, `AGENT_INBOUND_KEY`, và key AI (`ANTHROPIC_API_KEY`
-hoặc `OPENAI_API_KEY` + `OPENAI_MODEL`). Phía backend-etsy cần:
+Biến bắt buộc: `PRIME_API_BASE`, `PRIME_SERVICE_KEY`, `AGENT_INBOUND_KEY`. Key AI nhập trên trang quản lý
+(env `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` chỉ còn là giá trị mặc định). Phía backend-etsy cần:
 
 | backend-etsy | PrimeAgent |
 |---|---|

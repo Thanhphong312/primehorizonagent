@@ -19,9 +19,12 @@ class OpenAIProvider:
             raise ProviderError("Thiếu OPENAI_MODEL")
         self.settings = settings
         if client is None:
+            if not settings.openai_api_key:
+                raise ProviderError("Chưa có OpenAI API key — nhập trên trang quản lý PrimeAgent")
             import openai
 
-            client = openai.OpenAI(timeout=float(settings.ai_timeout), max_retries=2)
+            client = openai.OpenAI(api_key=settings.openai_api_key, base_url=settings.openai_base_url or None,
+                                   timeout=float(settings.ai_timeout), max_retries=2)
         self.client = client
 
     def _content(self, parts: list[Part]) -> list[dict[str, Any]]:

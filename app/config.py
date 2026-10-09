@@ -1,4 +1,10 @@
-"""Cấu hình PrimeAgent — đọc toàn bộ từ biến môi trường (.env)."""
+"""Cấu hình PrimeAgent.
+
+Hai tầng:
+  • Biến môi trường (.env) — kết nối backend + giới hạn. Đặt một lần khi cài server.
+  • Cài đặt AI (provider / key / model) — sửa trên TRANG QUẢN LÝ, lưu ``data/settings.json``
+    (``app.store``), ghi đè env. Env chỉ còn là giá trị mặc định.
+"""
 
 from __future__ import annotations
 
@@ -28,6 +34,14 @@ class Settings:
     anthropic_model: str = field(default_factory=lambda: os.getenv("ANTHROPIC_MODEL", "claude-opus-5-5"))
     anthropic_effort: str = field(default_factory=lambda: os.getenv("ANTHROPIC_EFFORT", "medium"))
     openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", ""))
+    anthropic_api_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", ""))
+    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
+    # Base URL tuỳ chọn (gateway / proxy tương thích). Trống = API chính chủ.
+    anthropic_base_url: str = field(default_factory=lambda: os.getenv("ANTHROPIC_BASE_URL", ""))
+    openai_base_url: str = field(default_factory=lambda: os.getenv("OPENAI_BASE_URL", ""))
+
+    # Thư mục dữ liệu chạy (settings.json, secret_key) — KHÔNG commit.
+    data_dir: str = field(default_factory=lambda: os.getenv("AGENT_DATA_DIR", "data"))
 
     # Số đơn phân tích cùng lúc — giữ nhỏ để không dồn tải / chi phí.
     concurrency: int = field(default_factory=lambda: _int("AGENT_CONCURRENCY", 2))

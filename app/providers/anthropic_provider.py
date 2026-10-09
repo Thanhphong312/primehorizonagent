@@ -16,10 +16,13 @@ class AnthropicProvider:
     def __init__(self, settings, client=None):
         self.settings = settings
         if client is None:
+            if not settings.anthropic_api_key:
+                raise ProviderError("Chưa có Anthropic API key — nhập trên trang quản lý PrimeAgent")
             import anthropic
 
-            # ANTHROPIC_API_KEY đọc từ môi trường.
-            client = anthropic.Anthropic(timeout=float(settings.ai_timeout), max_retries=2)
+            client = anthropic.Anthropic(api_key=settings.anthropic_api_key,
+                                         base_url=settings.anthropic_base_url or None,
+                                         timeout=float(settings.ai_timeout), max_retries=2)
         self.client = client
 
     def _content(self, parts: list[Part]) -> list[dict[str, Any]]:
@@ -33,12 +36,15 @@ class AnthropicProvider:
         return out
 
     def analyze(self, system: str, parts: list[Part], schema: dict[str, Any]) -> ProviderResult:
+        extra: dict[str, Any] = {}
+        if not getattr(self.settings, "anthropic_base_url", ""):
+            # Bị bộ lọc an toàn từ chối thì máy chủ tự chạy lại trên model dự phòng phù hợp.
+            # Chỉ API chính chủ — gateway/proxy thường không nhận beta này.
+            extra = {"betas": [_FALLBACK_BETA], "fallbacks": "default"}
         resp = self.client.beta.messages.create(
             model=self.settings.anthropic_model,
             max_tokens=16000,
-            betas=[_FALLBACK_BETA],
-            # Bị bộ lọc an toàn từ chối thì máy chủ tự chạy lại trên model dự phòng phù hợp.
-            fallbacks="default",
+            **extra,
             system=system,
             output_config={"effort": self.settings.anthropic_effort,
                            "format": {"type": "json_schema", "schema": schema}},

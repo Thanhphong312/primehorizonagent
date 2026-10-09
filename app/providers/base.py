@@ -1,4 +1,4 @@
-"""Giao diện chung cho nhà cung cấp AI — đổi Claude ⇄ GPT chỉ bằng ``AI_PROVIDER``."""
+"""Giao diện chung cho nhà cung cấp AI — đổi Claude ⇄ GPT trên trang quản lý (hoặc ``AI_PROVIDER``)."""
 
 from __future__ import annotations
 
@@ -42,3 +42,16 @@ def get_provider(settings) -> Provider:
     from app.providers.anthropic_provider import AnthropicProvider
 
     return AnthropicProvider(settings)
+
+
+def check_key(settings) -> dict[str, Any]:
+    """Thử key bằng lệnh liệt kê model (không tốn token). Trả ``{ok, message, models?}``."""
+    try:
+        p = get_provider(settings)
+        page = p.client.models.list()
+        ids = [m.id for m in getattr(page, "data", [])][:50]
+        return {"ok": True, "message": f"Key hợp lệ ({p.name})", "models": ids}
+    except ProviderError as exc:
+        return {"ok": False, "message": str(exc)}
+    except Exception as exc:  # noqa: BLE001 — sai key / mạng / gateway không hỗ trợ
+        return {"ok": False, "message": f"{type(exc).__name__}: {str(exc)[:300]}"}

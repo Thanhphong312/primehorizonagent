@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrimeAgent</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #fff; --text: #1d2433; --muted: #6b7385; --line: #e3e6ec;
+  --primary: #4361ee; --ok: #1a9b5a; --warn: #c98a04; --err: #d63a3a; --info: #2d8fd5; --dark: #555c6b;
+  --chip: #eef1f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0e1726; --panel: #1b2537; --text: #e0e6ed; --muted: #8a93a6; --line: #2a3650; --chip: #253048; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header h1 { font-size: 16px; margin: 0; }
+header .sp { flex: 1; }
+nav button { background: none; border: 0; padding: 8px 10px; color: var(--muted); cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
+nav button.on { color: var(--primary); border-color: var(--primary); }
+main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; margin-bottom: 14px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+label.f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); }
+input, select, textarea { font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+button.btn { font: inherit; border: 1px solid var(--primary); background: var(--primary); color: #fff; border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.btn.ghost { background: transparent; color: var(--primary); }
+button.btn.sm { padding: 3px 8px; font-size: 12px; }
+button.btn:disabled { opacity: .5; cursor: default; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 600; }
+tr:hover td { background: color-mix(in srgb, var(--primary) 4%, transparent); }
+.tbl { overflow-x: auto; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px; color: #fff; white-space: nowrap; }
+.c0 { background: var(--chip); color: var(--muted); } .c1 { background: var(--info); } .c2 { background: var(--ok); }
+.c3 { background: var(--warn); } .c4 { background: var(--err); } .c9 { background: var(--dark); }
+.muted { color: var(--muted); } .small { font-size: 12px; } .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.err { color: var(--err); } .okc { color: var(--ok); } .warnc { color: var(--warn); }
+.msg { padding: 8px 10px; border-radius: 6px; margin-bottom: 10px; }
+.msg.e { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.msg.o { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--ok); }
+.login { max-width: 340px; margin: 12vh auto; }
+.login input { width: 100%; margin-bottom: 8px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+.kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 10px; align-items: center; }
+.src { font-size: 11px; color: var(--muted); }
+dialog { width: min(1100px, 96vw); max-height: 92vh; border: 1px solid var(--line); border-radius: 10px; padding: 0; background: var(--panel); color: var(--text); }
+dialog::backdrop { background: rgba(0,0,0,.55); }
+.dlg-h { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+.dlg-b { padding: 14px 16px; }
+.imgs { display: flex; flex-wrap: wrap; gap: 8px; }
+.imgs figure { margin: 0; width: 150px; }
+.imgs img { width: 150px; height: 150px; object-fit: contain; background: repeating-conic-gradient(#ccc 0 25%, #fff 0 50%) 0 0/16px 16px; border: 1px solid var(--line); border-radius: 6px; }
+.imgs figcaption { font-size: 11px; color: var(--muted); word-break: break-all; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.pager { display: flex; gap: 8px; align-items: center; justify-content: flex-end; margin-top: 10px; }
+.hidden { display: none !important; }
+@media (max-width: 640px) { main { padding: 10px; } .kv { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div id="loginView" class="login panel hidden">
+  <h2 style="margin-top:0">PrimeAgent</h2>
+  <p class="muted small">Đăng nhập bằng tài khoản PrimeHorizon (admin / fulfill).</p>
+  <div id="loginMsg"></div>
+  <form id="loginForm">
+    <input id="lu" placeholder="Tài khoản" autocomplete="username" required>
+    <input id="lp" type="password" placeholder="Mật khẩu" autocomplete="current-password" required>
+    <button class="btn" style="width:100%">Đăng nhập</button>
+  </form>
+</div>
+
+<div id="appView" class="hidden">
+  <header>
+    <h1>🤖 PrimeAgent</h1>
+    <nav><button data-tab="ful" class="on">Lượt fulfill</button><button data-tab="set">Cài đặt AI</button></nav>
+    <span class="sp"></span>
+    <span id="aiState" class="small muted"></span>
+    <span id="who" class="small"></span>
+    <button class="btn ghost sm" id="logoutBtn">Đăng xuất</button>
+  </header>
+
+  <main>
+    <!-- ── Lượt fulfill ── -->
+    <section id="tab-ful">
+      <div id="fulMsg"></div>
+      <div class="panel">
+        <form id="filterForm" class="row">
+          <label class="f">Nền tảng<select name="platform"><option value="">Tất cả</option><option value="etsy">Etsy</option><option value="tiktok">TikTok</option></select></label>
+          <label class="f">Nhà cung cấp<select name="supplier_id" id="supSel"><option value="">Tất cả</option></select></label>
+          <label class="f">Từ ngày<input type="date" name="date_from"></label>
+          <label class="f">Đến ngày<input type="date" name="date_to"></label>
+          <label class="f">Trạng thái AI<select name="analysis">
+            <option value="">Tất cả</option><option value="0">Chưa phân tích</option><option value="1">Đang phân tích</option>
+            <option value="2">OK</option><option value="3">Cảnh báo</option><option value="4">Lỗi</option><option value="9">Thất bại</option></select></label>
+          <label class="f">Mã đơn / mã fulfill<input name="q" placeholder="4181868323, 690…" style="width:160px"></label>
+          <button class="btn">Lọc</button>
+          <span class="sp" style="flex:1"></span>
+          <button type="button" class="btn" id="bulkBtn" disabled>🤖 Phân tích đã chọn (0)</button>
+        </form>
+        <div class="row small muted" style="margin-top:8px">
+          Chế độ trên web chính:
+          <span>Etsy <select id="modeEtsy" data-p="etsy" class="modeSel"><option value="manual">Thủ công</option><option value="auto">Tự động</option></select></span>
+          <span>TikTok <select id="modeTiktok" data-p="tiktok" class="modeSel"><option value="manual">Thủ công</option><option value="auto">Tự động</option></select></span>
+          <span id="modeMsg"></span>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="tbl"><table>
+          <thead><tr>
+            <th><input type="checkbox" id="checkAll" aria-label="Chọn tất cả"></th>
+            <th>Lượt</th><th>Đơn</th><th>Nhà cung cấp</th><th>Ngày gửi</th><th>AI</th><th>Tóm tắt</th><th></th>
+          </tr></thead>
+          <tbody id="rows"><tr><td colspan="8" class="muted">Đang tải…</td></tr></tbody>
+        </table></div>
+        <div class="pager"><span id="pageInfo" class="small muted"></span>
+          <button class="btn ghost sm" id="prevBtn">‹ Trước</button><button class="btn ghost sm" id="nextBtn">Sau ›</button></div>
+      </div>
+    </section>
+
+    <!-- ── Cài đặt AI ── -->
+    <section id="tab-set" class="hidden">
+      <div id="setMsg"></div>
+      <form id="setForm">
+        <div class="panel">
+          <div class="kv">
+            <span>Provider đang dùng</span>
+            <span><label><input type="radio" name="ai_provider" value="anthropic"> Claude (Anthropic)</label>
+                  &nbsp; <label><input type="radio" name="ai_provider" value="openai"> GPT (OpenAI)</label></span>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="panel">
+            <h3 style="margin-top:0">Claude (Anthropic)</h3>
+            <div class="kv">
+              <span>API key</span><span><input name="anthropic_api_key" type="password" autocomplete="off" style="width:100%"><div class="src" data-src="anthropic_api_key"></div></span>
+              <span>Model</span><span><input name="anthropic_model" placeholder="claude-opus-5-5" style="width:100%"><div class="src" data-src="anthropic_model"></div></span>
+              <span>Effort</span><span><select name="anthropic_effort"><option value="">(mặc định)</option><option>low</option><option>medium</option><option>high</option><option>xhigh</option><option>max</option></select><div class="src" data-src="anthropic_effort"></div></span>
+              <span>Base URL</span><span><input name="anthropic_base_url" placeholder="trống = API chính chủ" style="width:100%"><div class="src" data-src="anthropic_base_url"></div></span>
+            </div>
+          </div>
+          <div class="panel">
+            <h3 style="margin-top:0">GPT (OpenAI)</h3>
+            <div class="kv">
+              <span>API key</span><span><input name="openai_api_key" type="password" autocomplete="off" style="width:100%"><div class="src" data-src="openai_api_key"></div></span>
+              <span>Model</span><span><input name="openai_model" placeholder="bắt buộc khi dùng GPT" style="width:100%"><div class="src" data-src="openai_model"></div></span>
+              <span>Base URL</span><span><input name="openai_base_url" placeholder="trống = API chính chủ" style="width:100%"><div class="src" data-src="openai_base_url"></div></span>
+            </div>
+          </div>
+        </div>
+        <div class="panel row">
+          <button class="btn">Lưu</button>
+          <button type="button" class="btn ghost" id="testBtn">Kiểm tra key</button>
+          <span class="small muted">Ô key để trống = giữ key cũ. Lưu xong có hiệu lực ngay cho lượt phân tích tiếp theo. Chỉ admin được sửa.</span>
+        </div>
+      </form>
+    </section>
+  </main>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-h"><strong id="dlgTitle">Chi tiết</strong><span class="sp" style="flex:1"></span>
+    <button class="btn sm" id="dlgAnalyze">🤖 Phân tích</button><button class="btn ghost sm" id="dlgClose">Đóng</button></div>
+  <div class="dlg-b" id="dlgBody"></div>
+</dialog>
+
+<script>
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const LABEL = {0:'Chưa phân tích',1:'Đang phân tích',2:'OK',3:'Cảnh báo',4:'Lỗi',9:'Thất bại'};
+const VERDICT = {ok:['✓ OK','okc'], warn:['⚠ Cảnh báo','warnc'], error:['✗ Lỗi','err'], unknown:['? Chưa rõ','muted']};
+const CHECKS = [['product_color','Loại & màu/size'],['design','Design'],['ticket','Ticket'],['print_side','Mặt in']];
+const badge = (c) => `<span class="badge c${c||0}">${LABEL[c||0]}</span>`;
+const fmt = (iso) => iso ? new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z').toLocaleString('vi-VN') : '';
+const thumb = (u) => `/ui/api/thumb?url=${encodeURIComponent(u)}`;
+
+let me = null, page = 1, total = 0, perPage = 50, rows = [], selected = new Set(), pollTimer = null, current = null;
+
+async function api(path, opts = {}) {
+  const r = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'primeagent', ...(opts.headers || {}) },
+                                body: opts.body ? JSON.stringify(opts.body) : undefined, credentials: 'same-origin' });
+  let j = {}; try { j = await r.json(); } catch {}
+  if (r.status === 401 && !path.endsWith('/login')) { showLogin(j.message); throw new Error(j.message || 'Chưa đăng nhập'); }
+  if (!r.ok || j.ok === false) throw new Error(j.message || `HTTP ${r.status}`);
+  return j;
+}
+function flash(el, text, ok) { el.innerHTML = text ? `<div class="msg ${ok ? 'o' : 'e'}">${esc(text)}</div>` : ''; }
+
+// ── đăng nhập ──
+function showLogin(msg) { $('#appView').classList.add('hidden'); $('#loginView').classList.remove('hidden'); flash($('#loginMsg'), msg && msg !== 'Chưa đăng nhập' ? msg : ''); stopPoll(); }
+async function showApp() {
+  $('#loginView').classList.add('hidden'); $('#appView').classList.remove('hidden');
+  $('#who').textContent = `${me.name || me.username} · ${me.role}`;
+  loadState(); loadModes(); loadList();
+}
+$('#loginForm').onsubmit = async (e) => {
+  e.preventDefault();
+  try { const j = await api('/ui/api/login', { method: 'POST', body: { username: $('#lu').value, password: $('#lp').value } });
+        me = j.user; $('#lp').value = ''; showApp(); }
+  catch (err) { flash($('#loginMsg'), err.message); }
+};
+$('#logoutBtn').onclick = async () => { await api('/ui/api/logout', { method: 'POST' }).catch(() => {}); showLogin(); };
+
+// ── tab ──
+document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
+  $('#tab-ful').classList.toggle('hidden', b.dataset.tab !== 'ful');
+  $('#tab-set').classList.toggle('hidden', b.dataset.tab !== 'set');
+  if (b.dataset.tab === 'set') loadSettings();
+});
+
+// ── trạng thái AI trên header ──
+async function loadState() {
+  try { const s = (await api('/ui/api/settings')).data; const p = s.ai_provider.value;
+        const key = s[p === 'openai' ? 'openai_api_key' : 'anthropic_api_key'].set;
+        const model = s[p === 'openai' ? 'openai_model' : 'anthropic_model'].value;
+        $('#aiState').innerHTML = `${esc(p)} · ${esc(model || '—')} · ${key ? '<span class="okc">có key</span>' : '<span class="err">chưa có key</span>'}`; }
+  catch {}
+}
+
+// ── chế độ trên web chính ──
+async function loadModes() {
+  try { const d = (await api('/ui/api/modes')).data; $('#modeEtsy').value = d.modes.etsy; $('#modeTiktok').value = d.modes.tiktok;
+        $('#modeMsg').innerHTML = d.enabled ? '' : '<span class="warnc">· backend chưa cấu hình AGENT_URL</span>'; }
+  catch (e) { $('#modeMsg').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+document.querySelectorAll('.modeSel').forEach((s) => s.onchange = async () => {
+  if (s.value === 'auto' && !confirm(`Bật tự động cho ${s.dataset.p}: MỌI lượt fulfill thành công sẽ được AI kiểm tra (tốn token). Tiếp tục?`)) { loadModes(); return; }
+  try { await api('/ui/api/modes', { method: 'PUT', body: { modes: { [s.dataset.p]: s.value } } }); loadModes(); }
+  catch (e) { $('#modeMsg').innerHTML = `<span class="err">${esc(e.message)}</span>`; loadModes(); }
+});
+
+// ── danh sách ──
+function filters() { const fd = new FormData($('#filterForm')); const q = new URLSearchParams();
+  for (const [k, v] of fd) if (v) q.set(k, v); q.set('page', page); q.set('per_page', perPage); return q; }
+async function loadList(quiet) {
+  try {
+    const d = (await api(`/ui/api/fulfillments?${filters()}`)).data;
+    rows = d.items; total = d.total;
+    const sel = $('#supSel'), cur = sel.value;
+    if (sel.options.length <= 1) sel.innerHTML = '<option value="">Tất cả</option>' + d.suppliers.map((s) => `<option value="${s.id}">${esc(s.name || s.type || '#' + s.id)}</option>`).join('');
+    sel.value = cur;
+    renderRows(); if (!quiet) flash($('#fulMsg'), '');
+    schedulePoll();
+  } catch (e) { if (!quiet) flash($('#fulMsg'), e.message); }
+}
+function renderRows() {
+  $('#rows').innerHTML = rows.length ? rows.map((r) => `
+    <tr>
+      <td><input type="checkbox" class="ck" data-id="${r.fulfillment_id}" ${selected.has(r.fulfillment_id) ? 'checked' : ''}></td>
+      <td class="mono">#${r.fulfillment_id}</td>
+      <td><span class="badge c0">${r.platform === 'etsy' ? 'Etsy' : 'TikTok'}</span> <span class="mono">${esc(r.order_ref || r.order_id)}</span>
+          ${r.store ? `<div class="small muted">${esc(r.store)}</div>` : ''}</td>
+      <td>${esc(r.supplier.name || r.supplier.type || '')}<div class="small muted mono">${esc(r.external_order_id || '')}</div></td>
+      <td class="small">${fmt(r.created_at)}</td>
+      <td>${badge(r.status_code)}${r.model ? `<div class="small muted">${esc(r.model)}</div>` : ''}</td>
+      <td class="small" style="max-width:360px">${esc(r.summary || '')}</td>
+      <td style="white-space:nowrap"><button class="btn ghost sm" data-detail="${r.fulfillment_id}">Chi tiết</button>
+          <button class="btn sm" data-an="${r.fulfillment_id}" ${r.status_code === 1 ? 'disabled' : ''}>${r.status_code ? 'Phân tích lại' : 'Phân tích'}</button></td>
+    </tr>`).join('') : '<tr><td colspan="8" class="muted">Không có lượt fulfill nào khớp bộ lọc.</td></tr>';
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  $('#pageInfo').textContent = `${total} lượt · trang ${page}/${pages}`;
+  $('#prevBtn').disabled = page <= 1; $('#nextBtn').disabled = page >= pages;
+  updateBulk();
+}
+function updateBulk() { $('#bulkBtn').textContent = `🤖 Phân tích đã chọn (${selected.size})`; $('#bulkBtn').disabled = !selected.size;
+  $('#checkAll').checked = rows.length && rows.every((r) => selected.has(r.fulfillment_id)); }
+$('#filterForm').onsubmit = (e) => { e.preventDefault(); page = 1; selected.clear(); loadList(); };
+$('#prevBtn').onclick = () => { page--; loadList(); };
+$('#nextBtn').onclick = () => { page++; loadList(); };
+$('#checkAll').onchange = (e) => { rows.forEach((r) => e.target.checked ? selected.add(r.fulfillment_id) : selected.delete(r.fulfillment_id)); renderRows(); };
+$('#rows').onclick = (e) => {
+  const t = e.target;
+  if (t.classList.contains('ck')) { const id = +t.dataset.id; t.checked ? selected.add(id) : selected.delete(id); updateBulk(); }
+  if (t.dataset.detail) openDetail(+t.dataset.detail);
+  if (t.dataset.an) analyze([+t.dataset.an]);
+};
+$('#bulkBtn').onclick = () => {
+  if (selected.size > 5 && !confirm(`Gửi ${selected.size} lượt cho AI phân tích (tốn token)?`)) return;
+  analyze([...selected]);
+};
+
+async function analyze(ids) {
+  try {
+    const res = (await api('/ui/api/analyze', { method: 'POST', body: { ids } })).data;
+    const bad = res.filter((x) => !x.ok);
+    flash($('#fulMsg'), bad.length ? `${res.length - bad.length}/${res.length} lượt đã gửi. Lỗi: ` + bad.map((x) => `#${x.fulfillment_id} ${x.message}`).join('; ')
+                                   : `Đã gửi ${res.length} lượt cho AI — kết quả tự cập nhật.`, !bad.length);
+    ids.forEach((id) => selected.delete(id));
+    await loadList(true);
+    if (current && ids.includes(current)) openDetail(current);
+  } catch (e) { flash($('#fulMsg'), e.message); }
+}
+
+// ── tự cập nhật khi có lượt đang phân tích ──
+function stopPoll() { clearTimeout(pollTimer); pollTimer = null; }
+function schedulePoll() {
+  stopPoll();
+  if (rows.some((r) => r.status_code === 1)) pollTimer = setTimeout(async () => {
+    await loadList(true);
+    if (current && $('#dlg').open && rows.find((r) => r.fulfillment_id === current && r.status_code !== 1)) openDetail(current, true);
+  }, 5000);
+}
+
+// ── chi tiết ──
+function imgs(urls, cap) { return urls.length ? `<div class="imgs">${urls.map((u, i) => `<figure><a href="${esc(u)}" target="_blank" rel="noopener"><img loading="lazy" src="${thumb(u)}" alt=""></a><figcaption>${esc(cap ? cap(i) : '')}</figcaption></figure>`).join('')}</div>` : '<span class="muted small">—</span>'; }
+async function openDetail(fid, keepScroll) {
+  current = fid;
+  const dlg = $('#dlg'); if (!dlg.open) dlg.showModal();
+  $('#dlgTitle').textContent = `Lượt fulfill #${fid}`;
+  if (!keepScroll) $('#dlgBody').innerHTML = '<p class="muted">Đang tải…</p>';
+  try {
+    const { bundle: b, review: rv } = (await api(`/ui/api/fulfillments/${fid}`)).data;
+    const code = rv?.status_code || 0, res = rv?.result || {};
+    $('#dlgAnalyze').disabled = code === 1; $('#dlgAnalyze').textContent = code ? '🤖 Phân tích lại' : '🤖 Phân tích';
+    const resultHtml = !rv ? '<p class="muted">Chưa phân tích.</p>' : `
+      <p>${badge(code)} <span class="small muted">${fmt(rv.analyzed_at)} ${esc(res.provider || '')} ${esc(res.model || '')}
+        ${res.usage ? `· ${res.usage.input_tokens ?? '?'} in / ${res.usage.output_tokens ?? '?'} out tokens` : ''}
+        ${res.duration_ms ? `· ${(res.duration_ms / 1000).toFixed(1)}s` : ''} ${res.images_used != null ? `· ${res.images_used} ảnh` : ''}</span></p>
+      ${res.summary ? `<p><strong>${esc(res.summary)}</strong></p>` : ''}
+      ${res.error ? `<p class="err">${esc(res.error)}</p>` : ''}
+      ${(res.rule_findings || []).length ? `<ul>${res.rule_findings.map((f) => `<li class="${f.status === 'error' ? 'err' : 'warnc'}">${f.index ? `Item ${f.index}: ` : ''}${esc(f.reason)}</li>`).join('')}</ul>` : ''}
+      ${(res.items || []).length ? `<div class="tbl"><table><thead><tr><th>Item</th>${CHECKS.map((c) => `<th>${c[1]}</th>`).join('')}</tr></thead><tbody>
+        ${res.items.map((it) => `<tr><td class="mono">#${it.index} ${esc(it.sku || '')}</td>${CHECKS.map(([k]) => { const v = it.checks?.[k] || {}; const [l, c] = VERDICT[v.status] || ['—', 'muted'];
+          return `<td><div class="${c}">${l}</div><div class="small muted">${esc(v.reason || '')}</div></td>`; }).join('')}</tr>`).join('')}</tbody></table></div>` : ''}
+      ${(rv.history || []).length > 1 ? `<details><summary class="small muted">Lịch sử ${rv.history.length} lần</summary><ul class="small">${rv.history.map((h) => `<li>${fmt(h.at)} · ${LABEL[h.status_code] || h.status_code} · ${esc(h.model || h.provider || '')} ${esc(h.summary || '')}</li>`).join('')}</ul></details>` : ''}`;
+    const o = b.order || {};
+    $('#dlgBody').innerHTML = `
+      <div class="panel"><h3 style="margin-top:0">Kết quả AI</h3>${resultHtml}</div>
+      <div class="panel"><h3 style="margin-top:0">Đã gửi ${esc(b.supplier?.name || '')} <span class="small muted">(${esc(b.supplier?.type || '')})</span></h3>
+        ${(b.sent_items || []).map((it) => `<div class="item">
+          <div><strong>#${it.index}</strong> <span class="mono">${esc(it.sku)}</span> × ${it.quantity}
+            ${it.decoded ? `<span class="small"> — ${esc([it.decoded.product, it.decoded.color, it.decoded.size].filter(Boolean).join(' · '))}${it.decoded.allowed_areas ? ` · mặt in: ${esc(it.decoded.allowed_areas.join(', '))}` : ''}</span>` : '<span class="small warnc"> — chưa tra được sku</span>'}</div>
+          ${Object.keys(it.attributes || {}).length ? `<div class="small muted">${esc(Object.entries(it.attributes).map(([k, v]) => `${k}: ${v}`).join(' · '))}</div>` : ''}
+          <div class="grid2" style="margin-top:8px"><div><div class="small muted">File in</div>${imgs(it.designs.map((d) => d.url), (i) => it.designs[i].area)}</div>
+            <div><div class="small muted">Mockup</div>${imgs(it.mockups)}</div></div></div>`).join('') || '<p class="err">Không có item.</p>'}
+      </div>
+      <div class="panel"><h3 style="margin-top:0">Đơn ${esc(o.reference || '')} <span class="small muted">${esc(o.store || '')}</span></h3>
+        ${(o.items || []).map((it) => `<div class="item"><div><strong>#${it.index}</strong> ${esc(it.title)} × ${it.quantity ?? ''}</div>
+          <div class="small muted">${esc([it.color, it.size, it.variation, it.listing_sku].filter(Boolean).join(' · '))}
+            ${it.variants && Object.keys(it.variants).length ? ' · ' + esc(Object.entries(it.variants).map(([k, v]) => `${k}: ${v}`).join(' · ')) : ''}</div>
+          ${it.personalization ? `<div class="small">✍ ${esc(it.personalization)}</div>` : ''}
+          ${imgs(it.images || [])}</div>`).join('')}
+        ${o.note ? `<p class="small">Ghi chú: ${esc(o.note)}</p>` : ''}
+      </div>
+      <div class="panel"><h3 style="margin-top:0">Ticket (${(b.tickets || []).length})</h3>
+        ${(b.tickets || []).map((t) => `<div class="item"><div><strong>${esc(t.title || 'Ticket #' + t.id)}</strong> <span class="small muted">${esc(t.status)}</span></div>
+          <div class="small">${esc(t.content || '')}</div>${imgs(t.attachments || [])}
+          ${(t.comments || []).map((c) => `<div class="small" style="margin-top:6px"><strong>${esc(c.by || '')}:</strong> ${esc(c.text || '')}${imgs(c.attachments || [])}</div>`).join('')}</div>`).join('') || '<span class="muted small">Không có ticket.</span>'}
+      </div>`;
+  } catch (e) { $('#dlgBody').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
+}
+$('#dlgClose').onclick = () => { $('#dlg').close(); current = null; };
+$('#dlg').addEventListener('close', () => { current = null; });
+$('#dlgAnalyze').onclick = () => current && analyze([current]);
+
+// ── cài đặt ──
+let settingsCache = null;
+async function loadSettings() {
+  try {
+    const s = settingsCache = (await api('/ui/api/settings')).data;
+    const f = $('#setForm');
+    f.querySelectorAll('input[name=ai_provider]').forEach((r) => r.checked = r.value === s.ai_provider.value);
+    for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url']) f.elements[k].value = s[k].value || '';
+    for (const k of ['anthropic_api_key', 'openai_api_key']) { f.elements[k].value = ''; f.elements[k].placeholder = s[k].set ? `đang dùng ${s[k].value}` : 'chưa có key'; }
+    f.querySelectorAll('[data-src]').forEach((el) => { const v = s[el.dataset.src]; el.textContent = v.source === 'page' ? 'lưu trên trang' : v.source === 'env' ? 'từ .env' : ''; });
+    const isAdmin = (me.role || '').toLowerCase() === 'admin';
+    f.querySelectorAll('input, select, button:not(#testBtn)').forEach((el) => el.disabled = !isAdmin);
+    flash($('#setMsg'), isAdmin ? '' : 'Chỉ admin được sửa cài đặt AI.');
+  } catch (e) { flash($('#setMsg'), e.message); }
+}
+$('#setForm').onsubmit = async (e) => {
+  e.preventDefault();
+  const f = e.target, body = { ai_provider: f.querySelector('input[name=ai_provider]:checked')?.value };
+  for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url']) body[k] = f.elements[k].value;
+  for (const k of ['anthropic_api_key', 'openai_api_key']) if (f.elements[k].value.trim()) body[k] = f.elements[k].value.trim();
+  try { await api('/ui/api/settings', { method: 'PUT', body }); flash($('#setMsg'), 'Đã lưu — có hiệu lực ngay cho lượt phân tích tiếp theo.', true); loadSettings(); loadState(); }
+  catch (err) { flash($('#setMsg'), err.message); }
+};
+$('#testBtn').onclick = async () => {
+  flash($('#setMsg'), 'Đang kiểm tra…', true);
+  try { const r = (await api('/ui/api/settings/test', { method: 'POST' })).data;
+        flash($('#setMsg'), r.ok ? `${r.message}${r.models?.length ? ' · ' + r.models.slice(0, 8).join(', ') : ''}` : r.message, r.ok); }
+  catch (e) { flash($('#setMsg'), e.message); }
+};
+
+// ── khởi động ──
+api('/ui/api/me').then((j) => { me = j.user; showApp(); }).catch(() => {});
+</script>
+</body>
+</html>

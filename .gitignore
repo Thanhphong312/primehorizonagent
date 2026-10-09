@@ -4,3 +4,6 @@ venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Dữ liệu chạy: key AI nhập trên trang, secret cookie
+data/
