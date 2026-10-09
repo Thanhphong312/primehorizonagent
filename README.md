@@ -25,6 +25,30 @@ Hàng chờ nằm trong RAM: PrimeAgent restart thì mất job đang chờ, như
 
 ## Cài đặt
 
+### Server đang chạy (142.93.2.252 — check-trademark): venv + systemd, không Docker
+
+- Code: `/var/www/primeagent` (clone repo này) · env: `/var/www/primeagent/.env`
+- Service: `primeagent` (gunicorn `127.0.0.1:5300`, `-w 1 --threads 4`, `MemoryMax=700M`)
+- Log: `/var/log/primeagent/{access,error}.log`
+- Ra ngoài qua nginx HTTPS: `https://trademark.primehorizon.studio/primeagent/` (cổng 5300 không mở)
+
+Cập nhật code:
+
+```bash
+cd /var/www/primeagent && git pull && venv/bin/pip install -q -r requirements.txt
+systemctl restart primeagent && curl -s http://127.0.0.1:5300/health
+```
+
+### Chạy ở máy local (không cần Docker)
+
+```bash
+python3 -m venv venv && venv/bin/pip install -r requirements.txt
+cp .env.example .env      # điền key
+venv/bin/python -m flask --app run:app run -p 5300
+```
+
+### Hoặc bằng Docker
+
 ```bash
 cp .env.example .env      # điền key
 docker compose up -d --build
@@ -36,7 +60,7 @@ hoặc `OPENAI_API_KEY` + `OPENAI_MODEL`). Phía backend-etsy cần:
 
 | backend-etsy | PrimeAgent |
 |---|---|
-| `AGENT_URL` = địa chỉ PrimeAgent (vd `http://10.0.0.5:5300`) | — |
+| `AGENT_URL` = `https://trademark.primehorizon.studio/primeagent` | — |
 | `AGENT_INBOUND_KEY` | `AGENT_INBOUND_KEY` (giống nhau) |
 | `AGENT_SERVICE_KEY` | `PRIME_SERVICE_KEY` (giống nhau) |
 | `AGENT_TELEGRAM_CHAT_ID` = group test | — |
