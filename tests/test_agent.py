@@ -609,7 +609,7 @@ def test_sua_json_thieu_ngoac_dong():
 
 
 def test_khong_canh_bao_sku_voi_nha_khong_co_catalog():
-    b = bundle(supplier={"id": 8, "name": "Anprint", "type": "pineliner_pod"})
+    b = bundle(supplier={"id": 3, "name": "Onospod", "type": "onospod"})
     b["sent_items"][0]["decoded"] = None
     b["sent_items"][0]["designs"][0]["area"] = "FRONT"
     assert not any("tra được sku" in f["reason"] for f in run_rules(b))
