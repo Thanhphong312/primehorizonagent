@@ -19,6 +19,22 @@ from app.providers.base import ProviderError, get_provider
 logger = logging.getLogger(__name__)
 
 
+def _friendly_error(exc: Exception, settings) -> str:
+    """Lỗi SDK ⇒ câu dễ hiểu (vẫn giữ chi tiết gốc phía sau)."""
+    raw = f"{type(exc).__name__}: {exc}"
+    status = getattr(exc, "status_code", None)
+    base_url = settings.openai_base_url if settings.ai_provider == "openai" else settings.anthropic_base_url
+    if status == 401 or type(exc).__name__ == "AuthenticationError":
+        hint = ("Key miraiapi không hợp lệ hoặc đã hết quota/hết hạn — nạp mã redeem mới trên trang quản lý"
+                if "miraiapi.com" in (base_url or "") else "API key sai hoặc đã bị thu hồi — sửa trên trang quản lý")
+        return f"{hint}. ({raw[:300]})"
+    if status == 429:
+        return f"AI đang giới hạn tốc độ / hết hạn mức — thử lại sau. ({raw[:300]})"
+    if status in (502, 503, 504, 524, 529):
+        return f"Máy chủ AI quá tải / quá thời gian — bấm Phân tích lại sau. ({raw[:300]})"
+    return raw
+
+
 class Worker:
     def __init__(self, settings, *, client=None, provider=None, loader=load_image, store=None):
         self.settings = settings
@@ -88,7 +104,7 @@ class Worker:
             payload = failure_payload(str(exc), name)
         except Exception as exc:  # noqa: BLE001
             logger.exception("analyze %s", fulfillment_id)
-            payload = failure_payload(f"{type(exc).__name__}: {exc}", name)
+            payload = failure_payload(_friendly_error(exc, settings), name)
         try:
             self.client.post_result(fulfillment_id, payload)
         except Exception as exc:  # noqa: BLE001

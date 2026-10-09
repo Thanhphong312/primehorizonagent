@@ -555,3 +555,17 @@ def test_store_so_nguyen(tmp_path):
     assert eff.gateway_image_px == 384 and eff.max_images == 8
     with pytest.raises(ValueError):
         st.update({"max_images": "999"})
+
+
+def test_loi_401_mirai_bao_nap_ma_moi(tmp_path):
+    from app.store import Store
+
+    class AuthErr(Exception):
+        status_code = 401
+    st = Store(str(tmp_path))
+    st.update({"anthropic_api_key": "sk-x", "anthropic_base_url": "https://api.miraiapi.com"})
+    c = FakeClient(bundle())
+    Worker(settings(), client=c, store=st, provider=FakeProvider(exc=AuthErr("Invalid token")),
+           loader=lambda *a, **k: IMG).process(812)
+    err = c.posted[0][1]["error"]
+    assert "nạp mã redeem mới" in err and "Invalid token" in err
