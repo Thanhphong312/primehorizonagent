@@ -9,6 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 
+CATALOG_TYPES = {"sellerwix", "simpleprint", "printbelle", "generic"}
+
+
 def _norm(s: str | None) -> str:
     return "".join(ch for ch in (s or "").lower() if ch.isalnum())
 
@@ -33,12 +36,15 @@ def run_rules(bundle: dict[str, Any]) -> list[dict[str, Any]]:
                     "reason": "Payload gửi nhà cung cấp không có item nào"})
         return out
 
+    # Chỉ các nhà cung cấp backend tra được catalog mới cảnh báo "không tra được sku"; nhà khác (Onospod, Anprint,
+    # Pressify…) không có catalog ⇒ cảnh báo này lượt nào cũng hiện, chỉ gây nhiễu — để AI tự đọc sku.
+    has_catalog = ((bundle.get("supplier") or {}).get("type") or "") in CATALOG_TYPES
     seen: dict[tuple, int] = {}
     for it in sent:
         idx = it.get("index")
         dec = it.get("decoded")
         designs = it.get("designs") or []
-        if not dec:
+        if not dec and has_catalog:
             out.append({"index": idx, "check": "product_color", "status": "warn",
                         "reason": f"Không tra được sku {it.get('sku') or '(trống)'} trong catalog nhà cung cấp"})
         if not designs:

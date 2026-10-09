@@ -99,6 +99,13 @@ def _image_plan(bundle: dict[str, Any]) -> list[tuple[str, str]]:
     return uniq
 
 
+def _final_instruction(bundle: dict[str, Any]) -> str:
+    idx = [it.get("index") for it in bundle.get("sent_items") or []]
+    return (f"Chấm 4 mục cho từng item đã gửi theo đúng mẫu JSON. Có {len(idx)} item đã gửi (index: "
+            f"{', '.join(map(str, idx))}) ⇒ mảng items phải có ĐÚNG {len(idx)} phần tử, mỗi index đúng một lần — "
+            "kể cả khi các item trông giống hệt nhau (cùng sản phẩm / cùng mockup) thì vẫn chấm riêng từng item.")
+
+
 def analyze(bundle: dict[str, Any], provider: Provider, settings, *, loader=load_image) -> dict[str, Any]:
     """Trả về payload kết quả gửi về backend (``POST /api/agent/fulfillments/<id>/result``)."""
     t0 = time.monotonic()
@@ -136,12 +143,16 @@ def analyze(bundle: dict[str, Any], provider: Provider, settings, *, loader=load
     parts = [Part(text="DỮ LIỆU LƯỢT FULFILL (JSON):\n" + json.dumps(text, ensure_ascii=False, indent=1)),
              Part(text="Phát hiện của bước kiểm bằng code (đã chắc chắn, không cần chấm lại):\n" + rules_text),
              *parts_images,
-             Part(text="Chấm 4 mục cho từng item đã gửi theo đúng mẫu JSON.")]
+             Part(text=_final_instruction(bundle))]
 
     res = provider.analyze(SYSTEM_PROMPT, parts, schema.AI_RESULT_SCHEMA)
     sent_by_idx = {it.get("index"): it for it in bundle.get("sent_items") or []}
     items = []
+    got: set = set()
     for it in res.data.get("items") or []:
+        if it.get("index") in got or it.get("index") not in sent_by_idx:
+            continue       # trùng / lạ ⇒ bỏ (item thiếu sẽ bị báo bên dưới)
+        got.add(it.get("index"))
         checks = {k: it["checks"][k] for k in schema.CHECK_KEYS if k in (it.get("checks") or {})}
         items.append({"index": it.get("index"), "sku": (sent_by_idx.get(it.get("index")) or {}).get("sku"),
                       "checks": checks})

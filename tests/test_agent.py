@@ -606,3 +606,24 @@ def test_sua_json_thieu_ngoac_dong():
     d = parse_json_loose(bad)
     assert d["items"][0]["checks"]["print_side"]["status"] == "ok" and d["summary"] == "ok"
     assert parse_json_loose('{"items": [{"index": 1, "checks": {}}], "summary": "thiếu cuối"')["summary"] == "thiếu cuối"
+
+
+def test_khong_canh_bao_sku_voi_nha_khong_co_catalog():
+    b = bundle(supplier={"id": 8, "name": "Anprint", "type": "pineliner_pod"})
+    b["sent_items"][0]["decoded"] = None
+    b["sent_items"][0]["designs"][0]["area"] = "FRONT"
+    assert not any("tra được sku" in f["reason"] for f in run_rules(b))
+    b["supplier"]["type"] = "generic"
+    assert any("tra được sku" in f["reason"] for f in run_rules(b))
+
+
+def test_bat_ai_tra_du_item_va_bo_index_trung():
+    b = bundle()
+    b["sent_items"].append(dict(b["sent_items"][0], index=2, designs=[{"area": "Front", "url": "https://img/d2.png"}]))
+    b["order"]["items"][0]["quantity"] = 2
+    p = FakeProvider({"items": [{"index": 2, "checks": ok_checks()}, {"index": 2, "checks": ok_checks(design="error")}],
+                      "summary": ""})
+    out = analyze(b, p, settings(), loader=lambda *a, **k: IMG)
+    assert "ĐÚNG 2 phần tử" in p.calls[0][-1].text and "index: 1, 2" in p.calls[0][-1].text
+    assert [i["index"] for i in out["items"]] == [2] and out["items"][0]["checks"]["design"]["status"] == "ok"
+    assert any("item 1" in f["reason"] for f in out["rule_findings"])
