@@ -32,12 +32,16 @@ Mã kiểu Gildan hay gặp: 5000/64000/3001/1717 = áo thun, 18000 = sweatshirt
 trắng) cho mọi biến thể của listing, nên mockup khác loại / khác màu với đơn là BÌNH THƯỜNG. Màu gần nghĩa (vd \
 "Sand" ~ "Tan") là warn, khác hẳn là error.
 2. design — file thiết kế có đúng mẫu so với mockup/ảnh đơn không: cùng HÌNH IN, cùng chữ (bỏ qua loại áo / màu \
-áo trên mockup); nội dung cá nhân hoá \
+áo trên mockup). Khác mockup đúng ở chỗ ticket yêu cầu sửa (vd đã xoá dòng chữ theo ticket) ⇒ vẫn ok; nội dung cá nhân hoá \
 (tên, năm, chữ…) phải xuất hiện ĐÚNG CHÍNH TẢ trong file thiết kế. File thiết kế là hình in phẳng (thường nền \
 trong suốt); nếu "file thiết kế" lại là ảnh chụp sản phẩm/mockup (có áo, cốc, ốp, người mẫu…) còn "mockup" lại là \
 hình phẳng ⇒ hai ô bị dán ngược ⇒ error.
-3. ticket — mọi yêu cầu trong ticket đã được thực hiện chưa (đổi màu chữ, sửa tên, đổi size…). Không có ticket \
-⇒ ok với reason "Không có ticket".
+3. ticket — mọi yêu cầu trong ticket đã được thực hiện chưa (đổi màu chữ, sửa tên, xoá chữ, đổi size…). Không có \
+ticket ⇒ ok với reason "Không có ticket". Yêu cầu về NỘI DUNG IN (xoá / thêm / sửa chữ, đổi màu chữ…) ⇒ chỉ kết luận \
+bằng cách NHÌN LẠI CHÍNH ẢNH FILE THIẾT KẾ (ảnh có nhãn "File thiết kế"), đọc từng dòng chữ có trên đó. TUYỆT ĐỐI \
+không suy từ mockup, ảnh listing hay tên sản phẩm: mockup listing là bản GỐC trước khi sửa nên vẫn còn nội dung cũ \
+— điều đó là bình thường. Chỉ chấm error khi chính ảnh file thiết kế còn nội dung lẽ ra phải bỏ (hoặc thiếu nội \
+dung lẽ ra phải thêm); reason ghi rõ đã thấy gì trên file thiết kế.
 4. print_side — các mặt có in trên mockup (trước / sau / tay áo…) có khớp các mặt có file thiết kế không; mặt \
 in phải thuộc danh sách mặt in được phép của sku nếu có.
 
