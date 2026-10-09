@@ -30,7 +30,7 @@ Hàng chờ nằm trong RAM: PrimeAgent restart thì mất job đang chờ, như
 - Code: `/var/www/primeagent` (clone repo này) · env: `/var/www/primeagent/.env`
 - Service: `primeagent` (gunicorn `127.0.0.1:5300`, `-w 1 --threads 4`, `MemoryMax=700M`)
 - Log: `/var/log/primeagent/{access,error}.log`
-- Ra ngoài qua nginx HTTPS: `https://trademark.primehorizon.studio/primeagent/` (cổng 5300 không mở)
+- Ra ngoài qua nginx HTTPS: `https://agent.primehorizon.studio` (site nginx `primeagent`, chứng chỉ Let's Encrypt tự gia hạn; cổng 5300 không mở)
 
 Cập nhật code:
 
@@ -60,7 +60,7 @@ hoặc `OPENAI_API_KEY` + `OPENAI_MODEL`). Phía backend-etsy cần:
 
 | backend-etsy | PrimeAgent |
 |---|---|
-| `AGENT_URL` = `https://trademark.primehorizon.studio/primeagent` | — |
+| `AGENT_URL` = `https://agent.primehorizon.studio` | — |
 | `AGENT_INBOUND_KEY` | `AGENT_INBOUND_KEY` (giống nhau) |
 | `AGENT_SERVICE_KEY` | `PRIME_SERVICE_KEY` (giống nhau) |
 | `AGENT_TELEGRAM_CHAT_ID` = group test | — |
