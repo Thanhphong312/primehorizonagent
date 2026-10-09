@@ -285,3 +285,9 @@ def test_rules_file_in_la_mockup_hoac_trung_link_mockup():
     assert f["check"] == "design" and f["status"] == "warn" and "dán nhầm" in f["reason"]
     it["mockups"] = [it["designs"][0]["url"]]
     assert [x["status"] for x in run_rules(b)] == ["error"]
+
+
+def test_trang_goc(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = create_app(settings(), worker=object()).test_client().get("/").get_json()
+    assert r["ok"] is True and r["ai_key_set"] is False

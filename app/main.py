@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hmac
 import logging
+import os
 
 from flask import Flask, jsonify, request
 
@@ -26,6 +27,13 @@ def create_app(settings=None, worker: Worker | None = None) -> Flask:
     def authorized() -> bool:
         got = request.headers.get("X-Agent-Key", "")
         return bool(got) and hmac.compare_digest(got, settings.agent_inbound_key)
+
+    @app.get("/")
+    def index():
+        return jsonify(service="PrimeAgent — AI kiểm tra fulfill", ok=True, provider=settings.ai_provider,
+                       ai_key_set=bool(os.getenv("ANTHROPIC_API_KEY" if settings.ai_provider == "anthropic"
+                                                 else "OPENAI_API_KEY")),
+                       endpoints=["GET /health", "POST /jobs (X-Agent-Key)"])
 
     @app.get("/health")
     def health():
