@@ -440,3 +440,13 @@ def test_ui_thumb_chan_mang_noi_bo(ui):
     _login(c)
     assert c.get("/ui/api/thumb?url=http://127.0.0.1:5300/health").status_code == 422
     assert c.get("/ui/api/thumb?url=file:///etc/passwd").status_code == 422
+
+
+def test_gateway_ghi_schema_vao_prompt_va_doc_json_chiu_loi():
+    txt = 'Kết quả:\n```json\n{"items": [{"index": 1, "checks": {}}], "summary": "ok"}\n```'
+    c = FakeAnthropic(_anthropic_resp(text=txt))
+    r = AnthropicProvider(settings(anthropic_base_url="https://gw"), client=c).analyze("sys", [], {"type": "object"})
+    assert r.data["summary"] == "ok" and "JSON Schema" in c.kw["system"]
+    with pytest.raises(ProviderError):     # sai khuôn
+        AnthropicProvider(settings(anthropic_base_url="https://gw"),
+                          client=FakeAnthropic(_anthropic_resp(text='{"r": 1}'))).analyze("s", [], {})

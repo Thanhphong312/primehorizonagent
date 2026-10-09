@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from app.providers.base import Part, ProviderError, ProviderResult
+from app.providers.base import (Part, ProviderError, ProviderResult, check_result_shape, parse_json_loose,
+                                schema_instruction)
 
 _FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
@@ -36,11 +37,15 @@ class AnthropicProvider:
         return out
 
     def analyze(self, system: str, parts: list[Part], schema: dict[str, Any]) -> ProviderResult:
+        gateway = bool(getattr(self.settings, "anthropic_base_url", ""))
         extra: dict[str, Any] = {}
-        if not getattr(self.settings, "anthropic_base_url", ""):
+        if not gateway:
             # Bị bộ lọc an toàn từ chối thì máy chủ tự chạy lại trên model dự phòng phù hợp.
             # Chỉ API chính chủ — gateway/proxy thường không nhận beta này.
             extra = {"betas": [_FALLBACK_BETA], "fallbacks": "default"}
+        else:
+            # Gateway (vd miraiapi) nhận output_config nhưng KHÔNG ép schema ⇒ ghi schema vào prompt.
+            system = system + schema_instruction(schema)
         resp = self.client.beta.messages.create(
             model=self.settings.anthropic_model,
             max_tokens=16000,
@@ -56,9 +61,11 @@ class AnthropicProvider:
             raise ProviderError("AI trả lời vượt giới hạn token")
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
         try:
-            data = json.loads(text)
+            data = parse_json_loose(text) if gateway else json.loads(text)
         except json.JSONDecodeError as exc:
             raise ProviderError(f"AI trả JSON không hợp lệ: {exc}") from exc
+        if gateway:
+            check_result_shape(data)
         usage = getattr(resp, "usage", None)
         return ProviderResult(
             data=data,
