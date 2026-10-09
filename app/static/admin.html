@@ -283,7 +283,7 @@ function renderRows() {
           ${r.store ? `<div class="small muted">${esc(r.store)}</div>` : ''}</td>
       <td>${esc(r.supplier.name || r.supplier.type || '')}<div class="small muted mono">${esc(r.external_order_id || '')}</div></td>
       <td class="small">${fmt(r.created_at)}</td>
-      <td>${badge(r.status_code)}${r.model ? `<div class="small muted">${esc(r.model)}</div>` : ''}</td>
+      <td>${badge(r.status_code)}${r.resolved_by ? `<div class="small okc" title="AI chấm ${LABEL[r.resolved_from] || ''} — người đã kiểm tra">✓ ${esc(r.resolved_by)} đã kiểm tra</div>` : r.model ? `<div class="small muted">${esc(r.model)}</div>` : ''}</td>
       <td class="small" style="max-width:360px">${esc(r.summary || '')}</td>
       <td style="white-space:nowrap"><button class="btn ghost sm" data-detail="${r.fulfillment_id}">Chi tiết</button>
           <button class="btn sm" data-an="${r.fulfillment_id}" ${r.status_code === 1 ? 'disabled' : ''}>${r.status_code ? 'Phân tích lại' : 'Phân tích'}</button></td>
@@ -347,6 +347,11 @@ async function openDetail(fid, keepScroll) {
       <p>${badge(code)} <span class="small muted">${fmt(rv.analyzed_at)} ${esc(res.provider || '')} ${esc(res.model || '')}
         ${res.usage ? `· ${res.usage.input_tokens ?? '?'} in / ${res.usage.output_tokens ?? '?'} out tokens` : ''}
         ${res.duration_ms ? `· ${(res.duration_ms / 1000).toFixed(1)}s` : ''} ${res.images_used != null ? `· ${res.images_used} ảnh` : ''}</span></p>
+      ${rv.resolution ? `<div class="msg o">✓ <strong>${esc(rv.resolution.by)}</strong> đã kiểm tra lúc ${fmt(rv.resolution.at)} — chuyển OK
+          (AI chấm ${LABEL[rv.resolution.from] || rv.resolution.from})${rv.resolution.note ? `: ${esc(rv.resolution.note)}` : ''}
+          <button class="btn ghost sm" data-unresolve="${fid}" style="margin-left:8px">Hoàn tác</button></div>` : ''}
+      ${[3, 4, 9].includes(code) ? `<div class="row" style="margin:6px 0 10px"><input id="resolveNote" placeholder="Ghi chú (tuỳ chọn): đã kiểm tra gì, vì sao OK" style="flex:1;min-width:220px">
+          <button class="btn sm" data-resolve="${fid}" style="background:var(--ok);border-color:var(--ok)">✓ Đã kiểm tra — chuyển OK</button></div>` : ''}
       ${res.summary ? `<p><strong>${esc(res.summary)}</strong></p>` : ''}
       ${res.error ? `<p class="err">${esc(res.error)}</p>` : ''}
       ${(res.rule_findings || []).length ? `<ul>${res.rule_findings.map((f) => `<li class="${f.status === 'error' ? 'err' : 'warnc'}">${f.index ? `Item ${f.index}: ` : ''}${esc(f.reason)}</li>`).join('')}</ul>` : ''}
@@ -380,6 +385,15 @@ async function openDetail(fid, keepScroll) {
       </div>`;
   } catch (e) { $('#dlgBody').innerHTML = `<p class="err">${esc(e.message)}</p>`; }
 }
+$('#dlgBody').addEventListener('click', async (e) => {
+  const t = e.target, fid = +(t.dataset.resolve || t.dataset.unresolve || 0);
+  if (!fid) return;
+  const body = t.dataset.unresolve ? { undo: true } : { note: ($('#resolveNote')?.value || '').trim() };
+  if (t.dataset.unresolve && !confirm('Hoàn tác — trả về kết quả AI chấm trước đó?')) return;
+  t.disabled = true;
+  try { await api(`/ui/api/fulfillments/${fid}/resolve`, { method: 'POST', body }); await openDetail(fid, true); loadList(true); }
+  catch (err) { alert(err.message); t.disabled = false; }
+});
 $('#dlgClose').onclick = () => { $('#dlg').close(); current = null; };
 $('#dlg').addEventListener('close', () => { current = null; });
 $('#dlgAnalyze').onclick = () => current && analyze([current]);

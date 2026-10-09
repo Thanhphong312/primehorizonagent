@@ -240,6 +240,15 @@ def fulfillment_detail(fid: int):
     return _relay(*_backend("GET", f"/api/agent/fulfillments/{fid}/detail"))
 
 
+@ui_bp.post("/ui/api/fulfillments/<int:fid>/resolve")
+@login_required()
+def resolve(fid: int):
+    """Đã kiểm tra lượt AI báo lỗi ⇒ chuyển OK (``{"note"}``) / hoàn tác (``{"undo": true}``)."""
+    body = request.get_json(silent=True) or {}
+    payload = {"undo": True} if body.get("undo") else {"note": str(body.get("note") or "")[:500]}
+    return _relay(*_backend("POST", f"/api/agent/fulfillments/{fid}/resolve", json=payload))
+
+
 @ui_bp.post("/ui/api/analyze")
 @login_required()
 def analyze():

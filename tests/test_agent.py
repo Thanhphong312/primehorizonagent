@@ -627,3 +627,12 @@ def test_bat_ai_tra_du_item_va_bo_index_trung():
     assert "ĐÚNG 2 phần tử" in p.calls[0][-1].text and "index: 1, 2" in p.calls[0][-1].text
     assert [i["index"] for i in out["items"]] == [2] and out["items"][0]["checks"]["design"]["status"] == "ok"
     assert any("item 1" in f["reason"] for f in out["rule_findings"])
+
+
+def test_ui_resolve_chuyen_tiep(ui):
+    c, be = ui
+    _login(c)
+    assert c.post("/ui/api/fulfillments/9/resolve", json={"note": "ok rồi"}, headers=H).status_code == 200
+    assert be.calls[-1][1] == "/api/agent/fulfillments/9/resolve" and be.calls[-1][3]["json"] == {"note": "ok rồi"}
+    c.post("/ui/api/fulfillments/9/resolve", json={"undo": True}, headers=H)
+    assert be.calls[-1][3]["json"] == {"undo": True}
