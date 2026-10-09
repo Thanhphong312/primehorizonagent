@@ -105,8 +105,8 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
         </form>
         <div class="row small muted" style="margin-top:8px">
           Chế độ trên web chính:
-          <span>Etsy <select id="modeEtsy" data-p="etsy" class="modeSel"><option value="manual">Thủ công</option><option value="auto">Tự động</option></select></span>
-          <span>TikTok <select id="modeTiktok" data-p="tiktok" class="modeSel"><option value="manual">Thủ công</option><option value="auto">Tự động</option></select></span>
+          <span>Etsy <select id="modeEtsy" data-p="etsy" class="modeSel"><option value="manual">Thủ công</option><option value="auto">Tự động (trong ngày)</option></select></span>
+          <span>TikTok <select id="modeTiktok" data-p="tiktok" class="modeSel"><option value="manual">Thủ công</option><option value="auto">Tự động (trong ngày)</option></select></span>
           <span id="modeMsg"></span>
         </div>
       </div>
@@ -253,7 +253,7 @@ async function loadModes() {
   catch (e) { $('#modeMsg').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
 }
 document.querySelectorAll('.modeSel').forEach((s) => s.onchange = async () => {
-  if (s.value === 'auto' && !confirm(`Bật tự động cho ${s.dataset.p}: MỌI lượt fulfill thành công sẽ được AI kiểm tra (tốn token). Tiếp tục?`)) { loadModes(); return; }
+  if (s.value === 'auto' && !confirm(`Bật tự động cho ${s.dataset.p}: các lượt fulfill gửi thành công HÔM NAY (kể cả lượt đã gửi từ sáng) sẽ được AI kiểm tra, tốn token. Lượt các ngày trước không bị quét. Tiếp tục?`)) { loadModes(); return; }
   try { await api('/ui/api/modes', { method: 'PUT', body: { modes: { [s.dataset.p]: s.value } } }); loadModes(); }
   catch (e) { $('#modeMsg').innerHTML = `<span class="err">${esc(e.message)}</span>`; loadModes(); }
 });
