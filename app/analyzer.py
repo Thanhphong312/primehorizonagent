@@ -25,9 +25,14 @@ Dữ liệu gồm:
 
 Với MỖI item đã gửi, chấm 4 mục:
 1. product_color — loại sản phẩm (áo thun / hoodie / sweatshirt / mug…), màu và size của sku có khớp đơn không. \
-Size trên Etsy thường ghi kèm loại áo (vd "Comfort Tshirt 2XL", "Sweatshirt Crew XL"). Màu gần nghĩa (vd \
+CHỈ so CHỮ: "decoded" của sku (hoặc mã sku nếu không tra được) với biến thể khách chọn trong đơn (size / màu / \
+kiểu áo). Size trên Etsy thường ghi kèm loại áo (vd "Comfort Tshirt 2XL", "Hoodie 2XL", "Sweatshirt Crew XL"). \
+Mã kiểu Gildan hay gặp: 5000/64000/3001/1717 = áo thun, 18000 = sweatshirt, 18500 = hoodie. \
+⚠️ KHÔNG dùng ảnh mockup / ảnh listing để kết luận loại áo hay màu: shop thường dùng CHUNG một mockup (vd áo thun \
+trắng) cho mọi biến thể của listing, nên mockup khác loại / khác màu với đơn là BÌNH THƯỜNG. Màu gần nghĩa (vd \
 "Sand" ~ "Tan") là warn, khác hẳn là error.
-2. design — file thiết kế có đúng mẫu so với mockup/ảnh đơn không: cùng hình, cùng chữ; nội dung cá nhân hoá \
+2. design — file thiết kế có đúng mẫu so với mockup/ảnh đơn không: cùng HÌNH IN, cùng chữ (bỏ qua loại áo / màu \
+áo trên mockup); nội dung cá nhân hoá \
 (tên, năm, chữ…) phải xuất hiện ĐÚNG CHÍNH TẢ trong file thiết kế. File thiết kế là hình in phẳng (thường nền \
 trong suốt); nếu "file thiết kế" lại là ảnh chụp sản phẩm/mockup (có áo, cốc, ốp, người mẫu…) còn "mockup" lại là \
 hình phẳng ⇒ hai ô bị dán ngược ⇒ error.
@@ -36,7 +41,9 @@ hình phẳng ⇒ hai ô bị dán ngược ⇒ error.
 4. print_side — các mặt có in trên mockup (trước / sau / tay áo…) có khớp các mặt có file thiết kế không; mặt \
 in phải thuộc danh sách mặt in được phép của sku nếu có.
 
-Mức chấm: ok = khớp; warn = nghi ngờ / cần người xem lại; error = sai chắc chắn, phải huỷ hoặc sửa; \
+Mức chấm: ok = khớp; warn = nghi ngờ / cần người xem lại; error = sai CHẮC CHẮN, phải huỷ hoặc sửa — nếu \
+reason của bạn có chữ "nghi vấn", "có thể", "cần xem lại" hoặc chính dữ liệu chữ lại khớp thì KHÔNG được chấm \
+error (tối đa warn); \
 unknown = thiếu dữ liệu để kết luận (vd không có mockup, ảnh không tải được). KHÔNG đoán — thiếu dữ liệu thì \
 unknown. reason viết tiếng Việt, ngắn, nêu cụ thể sai gì (vd "Mockup in mặt sau nhưng không có file Back").
 summary: 1–2 câu tiếng Việt tóm tắt cả lượt. Trả về đúng index của từng item đã gửi."""
