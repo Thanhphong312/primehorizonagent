@@ -15,7 +15,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
 header h1 { font-size: 16px; margin: 0; }
 header .sp { flex: 1; }
 nav button { background: none; border: 0; padding: 8px 10px; color: var(--muted); cursor: pointer; font: inherit; border-bottom: 2px solid transparent; }
@@ -80,6 +80,7 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
     <nav><button data-tab="ful" class="on">Lượt fulfill</button><button data-tab="set">Cài đặt AI</button></nav>
     <span class="sp"></span>
     <span id="aiState" class="small muted"></span>
+    <span id="quotaChip" class="badge c0 hidden" style="cursor:pointer" title=""></span>
     <span id="who" class="small"></span>
     <button class="btn ghost sm" id="logoutBtn">Đăng xuất</button>
   </header>
@@ -241,7 +242,7 @@ async function loadState() {
         const key = s[p === 'openai' ? 'openai_api_key' : 'anthropic_api_key'].set;
         const model = s[p === 'openai' ? 'openai_model' : 'anthropic_model'].value;
         $('#aiState').innerHTML = `${esc(p)} · ${esc(model || '—')} · ${key ? '<span class="okc">có key</span>' : '<span class="err">chưa có key</span>'}`;
-        const q = await loadQuota(); if (q && q.expires_at) $('#aiState').innerHTML += ` · ${left(q.expires_at)}`; }
+        refreshQuota(); }
   catch {}
 }
 
@@ -263,7 +264,9 @@ function filters() { const fd = new FormData($('#filterForm')); const q = new UR
 async function loadList(quiet) {
   try {
     const d = (await api(`/ui/api/fulfillments?${filters()}`)).data;
+    const wasPending = new Set(rows.filter((r) => r.status_code === 1).map((r) => r.fulfillment_id));
     rows = d.items; total = d.total;
+    if (rows.some((r) => wasPending.has(r.fulfillment_id) && r.status_code !== 1)) refreshQuota();
     const sel = $('#supSel'), cur = sel.value;
     if (sel.options.length <= 1) sel.innerHTML = '<option value="">Tất cả</option>' + d.suppliers.map((s) => `<option value="${s.id}">${esc(s.name || s.type || '#' + s.id)}</option>`).join('');
     sel.value = cur;
@@ -416,6 +419,23 @@ $('#testBtn').onclick = async () => {
 const fmtEpoch = (t) => t ? new Date(t * 1000).toLocaleString('vi-VN') : '';
 function left(t) { const ms = t * 1000 - Date.now(); if (ms <= 0) return '<span class="err">đã hết hạn</span>';
   const h = Math.floor(ms / 3.6e6), m = Math.floor(ms % 3.6e6 / 6e4); return `còn ${h}h${String(m).padStart(2, '0')}`; }
+const fmtTok = (n) => n == null ? '?' : Math.abs(n) >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : Math.abs(n) >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
+let lastQuota = null;
+async function refreshQuota() {
+  const q = await loadQuota();
+  const chip = $('#quotaChip');
+  if (!q || q.error || q.quota_total == null) { chip.classList.add('hidden'); return; }
+  const rem = q.quota_remaining, pct = q.quota_total ? rem / q.quota_total : 0;
+  const expired = q.expires_at && q.expires_at * 1000 < Date.now();
+  const spent = lastQuota != null && lastQuota > rem ? ` (−${fmtTok(lastQuota - rem)})` : '';
+  lastQuota = rem;
+  chip.className = 'badge ' + (expired || pct < 0.1 ? 'c4' : pct < 0.3 ? 'c3' : 'c2');
+  chip.innerHTML = `🪙 ${fmtTok(rem)} / ${fmtTok(q.quota_total)}${spent} · ${expired ? 'hết hạn' : left(q.expires_at).replace(/<[^>]+>/g, '')}`;
+  chip.title = `Quota miraiapi: còn ${rem.toLocaleString('vi-VN')} / ${q.quota_total.toLocaleString('vi-VN')} token · hết hạn ${fmtEpoch(q.expires_at)} · ${q.requests_24h ?? 0} request/24h. Bấm để mở Cài đặt AI.`;
+}
+setInterval(() => { if (me && !$('#appView').classList.contains('hidden')) refreshQuota(); }, 60000);
+$('#quotaChip').onclick = () => document.querySelector('nav button[data-tab="set"]').click();
+
 async function loadQuota() {
   try {
     const q = (await api('/ui/api/quota')).data;
