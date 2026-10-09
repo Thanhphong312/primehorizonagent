@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from app.analyzer import analyze, failure_payload
@@ -39,6 +40,17 @@ class Worker:
         """Env + cài đặt trên trang quản lý — đọc lại mỗi job nên đổi key/model có hiệu lực ngay."""
         return self.store.effective(self.settings) if self.store else self.settings
 
+    def _check_expiry(self, settings) -> None:
+        """Key miraiapi gói theo ngày: hết hạn ⇒ báo rõ thay vì lỗi 401 khó hiểu từ gateway."""
+        from app import mirai
+
+        if not self.store or settings.ai_provider != "anthropic" or not mirai.is_mirai(settings.anthropic_base_url):
+            return
+        exp = mirai.Meta(self.store.dir).load().get("expires_at")
+        if exp and time.time() > float(exp):
+            when = time.strftime("%d/%m %H:%M", time.localtime(float(exp)))
+            raise ProviderError(f"Key miraiapi đã hết hạn lúc {when} — nạp mã redeem mới trên trang quản lý")
+
     def submit(self, fulfillment_id: int) -> bool:
         """False nếu lượt này đang được phân tích (bỏ job trùng)."""
         with self._lock:
@@ -69,6 +81,7 @@ class Worker:
         settings = self.current_settings()
         name = getattr(self._provider, "name", None) or settings.ai_provider
         try:
+            self._check_expiry(settings)
             provider = self._provider or get_provider(settings)
             payload = analyze(bundle, provider, settings, loader=self._loader)
         except ProviderError as exc:

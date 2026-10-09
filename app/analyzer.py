@@ -102,10 +102,14 @@ def analyze(bundle: dict[str, Any], provider: Provider, settings, *, loader=load
     labels: dict[str, str] = {}
     parts_images: list[Part] = []
     failed: list[dict[str, str]] = []
+    base_url = settings.openai_base_url if settings.ai_provider == "openai" else settings.anthropic_base_url
+    img_kw: dict[str, Any] = {"max_px": settings.image_max_px}
+    if base_url and settings.gateway_image_px:
+        img_kw = {"max_px": min(settings.image_max_px, settings.gateway_image_px), "jpeg_only": True}
     for url, desc in plan[: settings.max_images]:
         try:
-            img = loader(url, max_px=settings.image_max_px, max_bytes=settings.max_download_mb * 1024 * 1024,
-                         timeout=settings.http_timeout)
+            img = loader(url, max_bytes=settings.max_download_mb * 1024 * 1024, timeout=settings.http_timeout,
+                         **img_kw)
         except ImageLoadError as exc:
             failed.append({"url": url, "desc": desc, "error": str(exc)})
             continue

@@ -46,7 +46,7 @@ class AnthropicProvider:
         else:
             # Gateway (vd miraiapi) nhận output_config nhưng KHÔNG ép schema ⇒ ghi schema vào prompt.
             system = system + schema_instruction(schema)
-        resp = self.client.beta.messages.create(
+        params = dict(
             model=self.settings.anthropic_model,
             max_tokens=16000,
             **extra,
@@ -55,6 +55,10 @@ class AnthropicProvider:
                            "format": {"type": "json_schema", "schema": schema}},
             messages=[{"role": "user", "content": self._content(parts)}],
         )
+        # Streaming: lượt có nhiều ảnh chạy 1–3 phút; không stream thì Cloudflare của gateway cắt ở ~100s (524)
+        # dù vẫn tính token. Gom lại thành message hoàn chỉnh bằng get_final_message().
+        with self.client.beta.messages.stream(**params) as stream:
+            resp = stream.get_final_message()
         if resp.stop_reason == "refusal":
             raise ProviderError("AI từ chối phân tích lượt này")
         if resp.stop_reason == "max_tokens":

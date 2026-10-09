@@ -125,6 +125,18 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
     <!-- ── Cài đặt AI ── -->
     <section id="tab-set" class="hidden">
       <div id="setMsg"></div>
+      <div class="panel" id="redeemPanel">
+        <h3 style="margin-top:0">Nạp key từ mã redeem (miraiapi)</h3>
+        <p class="small muted" style="margin-top:0">Chọn file .txt nhà bán gửi, hoặc dán nội dung / mã <span class="mono">MR-…</span>.
+          Agent tự đổi mã lấy key, đặt Base URL + model và dùng ngay. Nạp lại cùng mã không mất gói.</p>
+        <div id="quotaBox" class="small" style="margin-bottom:8px"></div>
+        <div class="row">
+          <input type="file" id="redeemFile" accept=".txt,text/plain">
+          <textarea id="redeemText" rows="2" placeholder="…hoặc dán nội dung có mã MR-…" style="flex:1;min-width:240px"></textarea>
+          <button type="button" class="btn" id="redeemBtn">Kích hoạt & dùng key</button>
+        </div>
+        <div id="redeemMsg" style="margin-top:8px"></div>
+      </div>
       <form id="setForm">
         <div class="panel">
           <div class="kv">
@@ -150,6 +162,16 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
               <span>Model</span><span><input name="openai_model" placeholder="bắt buộc khi dùng GPT" style="width:100%"><div class="src" data-src="openai_model"></div></span>
               <span>Base URL</span><span><input name="openai_base_url" placeholder="trống = API chính chủ" style="width:100%"><div class="src" data-src="openai_base_url"></div></span>
             </div>
+          </div>
+        </div>
+        <div class="panel">
+          <h3 style="margin-top:0">Ảnh gửi AI</h3>
+          <div class="kv">
+            <span>Cạnh dài tối đa (px)</span><span><input name="image_max_px" type="number" min="128" max="2576" placeholder="1568"><div class="src" data-src="image_max_px"></div></span>
+            <span>Số ảnh tối đa / lượt</span><span><input name="max_images" type="number" min="1" max="30" placeholder="16"><div class="src" data-src="max_images"></div></span>
+            <span>Qua gateway (px)</span><span><input name="gateway_image_px" type="number" min="0" max="2576" placeholder="512">
+              <div class="small muted">Khi có Base URL riêng: ảnh thu nhỏ còn cỡ này + nén JPEG. Gateway như miraiapi tính token theo dung lượng ảnh
+              (1568px ≈ 800k token/ảnh, 512px ≈ 15–30k). 0 = tắt.</div><div class="src" data-src="gateway_image_px"></div></span>
           </div>
         </div>
         <div class="panel row">
@@ -218,7 +240,8 @@ async function loadState() {
   try { const s = (await api('/ui/api/settings')).data; const p = s.ai_provider.value;
         const key = s[p === 'openai' ? 'openai_api_key' : 'anthropic_api_key'].set;
         const model = s[p === 'openai' ? 'openai_model' : 'anthropic_model'].value;
-        $('#aiState').innerHTML = `${esc(p)} · ${esc(model || '—')} · ${key ? '<span class="okc">có key</span>' : '<span class="err">chưa có key</span>'}`; }
+        $('#aiState').innerHTML = `${esc(p)} · ${esc(model || '—')} · ${key ? '<span class="okc">có key</span>' : '<span class="err">chưa có key</span>'}`;
+        const q = await loadQuota(); if (q && q.expires_at) $('#aiState').innerHTML += ` · ${left(q.expires_at)}`; }
   catch {}
 }
 
@@ -365,18 +388,19 @@ async function loadSettings() {
     const s = settingsCache = (await api('/ui/api/settings')).data;
     const f = $('#setForm');
     f.querySelectorAll('input[name=ai_provider]').forEach((r) => r.checked = r.value === s.ai_provider.value);
-    for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url']) f.elements[k].value = s[k].value || '';
+    for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url', 'image_max_px', 'max_images', 'gateway_image_px']) f.elements[k].value = s[k].value || '';
     for (const k of ['anthropic_api_key', 'openai_api_key']) { f.elements[k].value = ''; f.elements[k].placeholder = s[k].set ? `đang dùng ${s[k].value}` : 'chưa có key'; }
     f.querySelectorAll('[data-src]').forEach((el) => { const v = s[el.dataset.src]; el.textContent = v.source === 'page' ? 'lưu trên trang' : v.source === 'env' ? 'từ .env' : ''; });
     const isAdmin = (me.role || '').toLowerCase() === 'admin';
     f.querySelectorAll('input, select, button:not(#testBtn)').forEach((el) => el.disabled = !isAdmin);
     flash($('#setMsg'), isAdmin ? '' : 'Chỉ admin được sửa cài đặt AI.');
+    $('#redeemPanel').querySelectorAll('input, textarea, button').forEach((el) => el.disabled = !isAdmin);
   } catch (e) { flash($('#setMsg'), e.message); }
 }
 $('#setForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target, body = { ai_provider: f.querySelector('input[name=ai_provider]:checked')?.value };
-  for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url']) body[k] = f.elements[k].value;
+  for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url', 'image_max_px', 'max_images', 'gateway_image_px']) body[k] = f.elements[k].value;
   for (const k of ['anthropic_api_key', 'openai_api_key']) if (f.elements[k].value.trim()) body[k] = f.elements[k].value.trim();
   try { await api('/ui/api/settings', { method: 'PUT', body }); flash($('#setMsg'), 'Đã lưu — có hiệu lực ngay cho lượt phân tích tiếp theo.', true); loadSettings(); loadState(); }
   catch (err) { flash($('#setMsg'), err.message); }
@@ -386,6 +410,37 @@ $('#testBtn').onclick = async () => {
   try { const r = (await api('/ui/api/settings/test', { method: 'POST' })).data;
         flash($('#setMsg'), r.ok ? `${r.message}${r.models?.length ? ' · ' + r.models.slice(0, 8).join(', ') : ''}` : r.message, r.ok); }
   catch (e) { flash($('#setMsg'), e.message); }
+};
+
+// ── nạp mã redeem miraiapi ──
+const fmtEpoch = (t) => t ? new Date(t * 1000).toLocaleString('vi-VN') : '';
+function left(t) { const ms = t * 1000 - Date.now(); if (ms <= 0) return '<span class="err">đã hết hạn</span>';
+  const h = Math.floor(ms / 3.6e6), m = Math.floor(ms % 3.6e6 / 6e4); return `còn ${h}h${String(m).padStart(2, '0')}`; }
+async function loadQuota() {
+  try {
+    const q = (await api('/ui/api/quota')).data;
+    if (!q) { $('#quotaBox').innerHTML = '<span class="muted">Không dùng key miraiapi.</span>'; return null; }
+    const used = q.quota_total != null ? q.quota_total - q.quota_remaining : null;
+    $('#quotaBox').innerHTML = q.error ? `<span class="err">Không kiểm tra được quota: ${esc(q.error)}</span>` :
+      `Gói đang dùng${q.code ? ` <span class="mono">${esc(q.code)}</span>` : ''}: hết hạn <strong>${fmtEpoch(q.expires_at)}</strong> (${left(q.expires_at)})
+       · còn <strong>${(q.quota_remaining ?? 0).toLocaleString('vi-VN')}</strong> / ${(q.quota_total ?? 0).toLocaleString('vi-VN')} token
+       ${used != null ? `(đã dùng ${used.toLocaleString('vi-VN')})` : ''} · ${q.requests_24h ?? 0} request/24h`;
+    return q;
+  } catch (e) { $('#quotaBox').innerHTML = `<span class="err">${esc(e.message)}</span>`; return null; }
+}
+$('#redeemFile').onchange = async (e) => { const f = e.target.files[0]; if (f) $('#redeemText').value = await f.text(); };
+$('#redeemBtn').onclick = async () => {
+  const text = $('#redeemText').value.trim();
+  if (!text) { flash($('#redeemMsg'), 'Chọn file hoặc dán nội dung có mã MR-…'); return; }
+  if (!confirm('Kích hoạt mã? Thời hạn gói bắt đầu tính từ lúc kích hoạt.')) return;
+  $('#redeemBtn').disabled = true; flash($('#redeemMsg'), 'Đang kích hoạt…', true);
+  try {
+    const d = (await api('/ui/api/redeem', { method: 'POST', body: { text } })).data;
+    flash($('#redeemMsg'), `${d.recovered ? 'Mã đã kích hoạt trước đó — dùng lại key cũ.' : 'Kích hoạt thành công.'} Hết hạn ${fmtEpoch(d.expires_at)}. Key đã được dùng ngay.`, true);
+    $('#redeemText').value = ''; $('#redeemFile').value = '';
+    loadSettings(); loadState(); loadQuota();
+  } catch (e) { flash($('#redeemMsg'), e.message); }
+  finally { $('#redeemBtn').disabled = false; }
 };
 
 // ── khởi động ──

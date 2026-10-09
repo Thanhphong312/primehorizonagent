@@ -13,7 +13,8 @@ from dataclasses import replace
 from typing import Any
 
 EDITABLE = ("ai_provider", "anthropic_api_key", "anthropic_model", "anthropic_effort", "anthropic_base_url",
-            "openai_api_key", "openai_model", "openai_base_url")
+            "openai_api_key", "openai_model", "openai_base_url", "image_max_px", "max_images", "gateway_image_px")
+INT_FIELDS = {"image_max_px": (128, 2576), "max_images": (1, 30), "gateway_image_px": (0, 2576)}
 SECRET_FIELDS = ("anthropic_api_key", "openai_api_key")
 PROVIDERS = ("anthropic", "openai")
 EFFORTS = ("low", "medium", "high", "xhigh", "max")
@@ -43,7 +44,7 @@ class Store:
 
     def effective(self, base):
         """Settings env + phần đã lưu trên trang (chuỗi rỗng = dùng env)."""
-        over = {k: v for k, v in self.load().items() if v}
+        over: dict[str, Any] = {k: (int(v) if k in INT_FIELDS else v) for k, v in self.load().items() if v}
         return replace(base, **over) if over else base
 
     def update(self, changes: dict[str, Any]) -> dict[str, Any]:
@@ -57,6 +58,10 @@ class Store:
                 raise ValueError("ai_provider phải là anthropic hoặc openai")
             if k == "anthropic_effort" and v and v not in EFFORTS:
                 raise ValueError(f"effort phải là một trong {', '.join(EFFORTS)}")
+            if k in INT_FIELDS and v:
+                lo, hi = INT_FIELDS[k]
+                if not v.isdigit() or not lo <= int(v) <= hi:
+                    raise ValueError(f"{k} phải là số trong khoảng {lo}–{hi}")
             if k.endswith("_base_url") and v and not v.startswith(("https://", "http://")):
                 raise ValueError("Base URL phải bắt đầu bằng https://")
             clean[k] = v
@@ -79,6 +84,7 @@ class Store:
         out: dict[str, Any] = {}
         for k in EDITABLE:
             v = getattr(eff, k)
+            v = str(v) if k in INT_FIELDS else v
             src = "page" if saved.get(k) else ("env" if v else "")
             out[k] = {"value": mask(v) if k in SECRET_FIELDS else v, "set": bool(v), "source": src}
         return out

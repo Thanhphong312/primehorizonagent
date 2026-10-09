@@ -43,7 +43,8 @@ class ImageLoadError(Exception):
 
 
 def load_image(url: str, *, max_px: int, max_bytes: int, timeout: int,
-               session: requests.Session | None = None) -> LoadedImage:
+               session: requests.Session | None = None, jpeg_only: bool = False) -> LoadedImage:
+    """``jpeg_only``: luôn nén JPEG (nền trong suốt ⇒ nền xám nhạt) — cho gateway tính tiền theo dung lượng ảnh."""
     src = drive_thumbnail(url, max_px)
     http = session or requests
     try:
@@ -67,7 +68,15 @@ def load_image(url: str, *, max_px: int, max_bytes: int, timeout: int,
     out = io.BytesIO()
     # PNG giữ nền trong suốt của file thiết kế (nền trong suốt quyết định "in gì");
     # JPEG cho mockup / ảnh chụp để nhẹ.
-    if img.mode in ("RGBA", "LA", "P"):
+    if jpeg_only:
+        if img.mode in ("RGBA", "LA", "P"):
+            rgba = img.convert("RGBA")
+            bg = Image.new("RGB", rgba.size, (225, 225, 225))   # xám nhạt: chữ trắng / đen đều còn thấy
+            bg.paste(rgba, mask=rgba.split()[3])
+            img = bg
+        img.convert("RGB").save(out, format="JPEG", quality=70, optimize=True)
+        media = "image/jpeg"
+    elif img.mode in ("RGBA", "LA", "P"):
         img = img.convert("RGBA")
         img.save(out, format="PNG", optimize=True)
         media = "image/png"

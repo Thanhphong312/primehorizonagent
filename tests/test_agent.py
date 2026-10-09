@@ -170,14 +170,24 @@ def _anthropic_resp(stop="end_turn", text=None):
 
 
 class FakeAnthropic:
+    """Giả ``client.beta.messages.stream(...)`` (context manager + get_final_message)."""
+
     def __init__(self, resp):
         self.kw = None
-        self.beta = SimpleNamespace(messages=SimpleNamespace(create=self._create))
+        self.beta = SimpleNamespace(messages=SimpleNamespace(stream=self._stream))
         self.resp = resp
 
-    def _create(self, **kw):
+    def _stream(self, **kw):
         self.kw = kw
-        return self.resp
+        resp = self.resp
+
+        class _S:
+            def __enter__(self):
+                return SimpleNamespace(get_final_message=lambda: resp)
+
+            def __exit__(self, *a):
+                return False
+        return _S()
 
 
 def test_anthropic_request_shape():
@@ -450,3 +460,98 @@ def test_gateway_ghi_schema_vao_prompt_va_doc_json_chiu_loi():
     with pytest.raises(ProviderError):     # sai khuôn
         AnthropicProvider(settings(anthropic_base_url="https://gw"),
                           client=FakeAnthropic(_anthropic_resp(text='{"r": 1}'))).analyze("s", [], {})
+
+
+# ── nạp mã redeem miraiapi ──
+
+FILE_TXT = """🎟 MÃ REDEEM CODE|MR-126B54C9B6BBFA1749A4F610125CE41EDF82C7A3D7CAD14C|
+📦 Gói|🤖 Claude 10M tokens · 1D|
+Body JSON|{"redeem_code"|"MR-126B54C9B6BBFA1749A4F610125CE41EDF82C7A3D7CAD14C"}
+• API Key|<API_KEY_CỦA_BẠN>|"""
+
+
+def test_tim_ma_redeem_trong_file():
+    from app import mirai
+    assert mirai.extract_code(FILE_TXT) == "MR-126B54C9B6BBFA1749A4F610125CE41EDF82C7A3D7CAD14C"
+    with pytest.raises(mirai.MiraiError):
+        mirai.extract_code("không có mã")
+    with pytest.raises(mirai.MiraiError):
+        mirai.extract_code("MR-AAAAAAAAAAAAAAAAAAAA MR-BBBBBBBBBBBBBBBBBBBB")
+
+
+def test_ui_nap_ma_luu_key_va_quota(ui, monkeypatch):
+    from app import mirai
+    c, be = ui
+    _login(c)
+    calls = []
+
+    def fake_post(path, body, http=None, timeout=30):
+        calls.append((path, body))
+        if path == "/api/redeem/new":
+            return {"api_key": "sk-NEWKEY1234567890abcd", "expires_at": 1791614904, "quota_tokens": 10_000_000,
+                    "recovered": False}
+        return {"quota_total": 10_000_000, "quota_remaining": 9_000_000, "expires_at": 1791614904}
+
+    monkeypatch.setattr(mirai, "_post", fake_post)
+    assert c.post("/ui/api/redeem", json={"text": "rác"}, headers=H).status_code == 422
+    d = c.post("/ui/api/redeem", json={"text": FILE_TXT}, headers=H).get_json()["data"]
+    assert calls[-1] == ("/api/redeem/new", {"redeem_code": "MR-126B54C9B6BBFA1749A4F610125CE41EDF82C7A3D7CAD14C"})
+    s = d["settings"]
+    assert s["anthropic_base_url"]["value"] == "https://api.miraiapi.com" and s["anthropic_model"]["value"] == "claude-opus-5.5"
+    assert s["anthropic_api_key"]["set"] and "567890" not in s["anthropic_api_key"]["value"]
+    q = c.get("/ui/api/quota").get_json()["data"]
+    assert q["quota_remaining"] == 9_000_000 and q["code"].startswith("MR-126B") and calls[-1][1] == {"api_key": "sk-NEWKEY1234567890abcd"}
+
+
+def test_ui_fulfill_khong_nap_ma_duoc(ui):
+    c, be = ui
+    be.role = "fulfill"
+    _login(c)
+    assert c.post("/ui/api/redeem", json={"text": FILE_TXT}, headers=H).status_code == 403
+
+
+def test_worker_key_mirai_het_han(tmp_path):
+    from app import mirai
+    from app.store import Store
+    st = Store(str(tmp_path))
+    st.update({"anthropic_api_key": "sk-x", "anthropic_base_url": mirai.BASE_URL})
+    mirai.Meta(str(tmp_path)).save({"expires_at": 1000})
+    c = FakeClient(bundle())
+    Worker(settings(), client=c, store=st, loader=lambda *a, **k: IMG).process(812)
+    assert c.posted[0][1]["status_code"] == schema.FAILED and "hết hạn" in c.posted[0][1]["error"]
+
+
+def test_gateway_anh_nho_jpeg(monkeypatch):
+    seen = []
+    p = FakeProvider({"items": [{"index": 1, "checks": ok_checks()}], "summary": ""})
+    analyze(bundle(), p, settings(anthropic_base_url="https://gw", gateway_image_px=512),
+            loader=lambda url, **k: seen.append(k) or IMG)
+    assert seen and all(k["max_px"] == 512 and k["jpeg_only"] for k in seen)
+    seen.clear()
+    analyze(bundle(), p, settings(), loader=lambda url, **k: seen.append(k) or IMG)
+    assert all(k["max_px"] == 1568 and "jpeg_only" not in k for k in seen)
+
+
+def test_jpeg_only_nen_trong_suot(monkeypatch):
+    import io
+    from PIL import Image
+    from app import images
+    buf = io.BytesIO()
+    Image.new("RGBA", (2000, 1000), (255, 255, 255, 0)).save(buf, format="PNG")
+
+    class R:
+        def raise_for_status(self): pass
+        def iter_content(self, n): yield buf.getvalue()
+    monkeypatch.setattr(images.requests, "get", lambda *a, **k: R())
+    img = images.load_image("https://x/a.png", max_px=512, max_bytes=10 << 20, timeout=5, jpeg_only=True)
+    assert img.media_type == "image/jpeg" and max(img.width, img.height) == 512
+
+
+def test_store_so_nguyen(tmp_path):
+    from app.store import Store
+    st = Store(str(tmp_path))
+    st.update({"gateway_image_px": "384", "max_images": "8"})
+    eff = st.effective(settings())
+    assert eff.gateway_image_px == 384 and eff.max_images == 8
+    with pytest.raises(ValueError):
+        st.update({"max_images": "999"})

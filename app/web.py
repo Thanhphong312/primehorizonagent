@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, Response, current_app, jsonify, request, send_file, session
 
+from app import mirai
 from app.images import ImageLoadError, load_image
 from app.prime_user import PrimeAuthError, PrimeUserClient
 from app.providers.base import check_key
@@ -163,6 +164,50 @@ def put_settings():
 @login_required()
 def test_settings():
     return jsonify(ok=True, data=check_key(_cfg("STORE").effective(_cfg("SETTINGS"))))
+
+
+def _meta() -> mirai.Meta:
+    return mirai.Meta(_cfg("STORE").dir)
+
+
+@ui_bp.post("/ui/api/redeem")
+@login_required(admin=True)
+def redeem():
+    """Dán / tải file nhà bán gửi (hoặc chỉ mã MR-…) ⇒ đổi lấy key, lưu làm key Claude đang dùng."""
+    body = request.get_json(silent=True) or {}
+    try:
+        code = mirai.extract_code(str(body.get("text") or "")[:20000])
+        data = mirai.redeem(code)
+    except mirai.MiraiError as exc:
+        return _err(str(exc), 422)
+    except Exception as exc:  # noqa: BLE001 — mạng
+        return _err(f"Không gọi được miraiapi: {type(exc).__name__}", 502)
+    store = _cfg("STORE")
+    cur_model = store.load().get("anthropic_model") or ""
+    store.update({"ai_provider": "anthropic", "anthropic_api_key": data["api_key"],
+                  "anthropic_base_url": mirai.BASE_URL,
+                  "anthropic_model": cur_model if cur_model and "." in cur_model else mirai.DEFAULT_MODEL})
+    _meta().save({"code": code[:7] + "…" + code[-4:], "expires_at": data.get("expires_at"),
+                  "quota_tokens": data.get("quota_tokens"), "recovered": bool(data.get("recovered")),
+                  "redeemed_at": int(time.time()), "redeemed_by": session["user"].get("username")})
+    return jsonify(ok=True, data={"recovered": bool(data.get("recovered")), "expires_at": data.get("expires_at"),
+                                  "quota_tokens": data.get("quota_tokens"),
+                                  "settings": store.public(_cfg("SETTINGS"))})
+
+
+@ui_bp.get("/ui/api/quota")
+@login_required()
+def quota():
+    """Hạn & quota còn lại của key miraiapi đang dùng (không phải miraiapi ⇒ ``data: null``)."""
+    eff = _cfg("STORE").effective(_cfg("SETTINGS"))
+    if eff.ai_provider != "anthropic" or not mirai.is_mirai(eff.anthropic_base_url) or not eff.anthropic_api_key:
+        return jsonify(ok=True, data=None)
+    meta = _meta().load()
+    try:
+        u = mirai.usage(eff.anthropic_api_key)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify(ok=True, data={**meta, "error": str(exc)[:200]})
+    return jsonify(ok=True, data={**meta, **u, "now": int(time.time())})
 
 
 @ui_bp.get("/ui/api/modes")

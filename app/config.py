@@ -49,6 +49,9 @@ class Settings:
     image_max_px: int = field(default_factory=lambda: _int("IMAGE_MAX_PX", 1568))
     # Giới hạn số ảnh / lượt và dung lượng tải mỗi ảnh.
     max_images: int = field(default_factory=lambda: _int("MAX_IMAGES", 16))
+    # Đi qua gateway (Base URL riêng): gateway kiểu miraiapi tính token theo DUNG LƯỢNG base64 của ảnh
+    # (ảnh 1568px ≈ 800k "token") ⇒ thu nhỏ + JPEG. 0 = không giới hạn thêm.
+    gateway_image_px: int = field(default_factory=lambda: _int("GATEWAY_IMAGE_PX", 512))
     max_download_mb: int = field(default_factory=lambda: _int("MAX_DOWNLOAD_MB", 40))
     http_timeout: int = field(default_factory=lambda: _int("HTTP_TIMEOUT", 60))
     ai_timeout: int = field(default_factory=lambda: _int("AI_TIMEOUT", 300))

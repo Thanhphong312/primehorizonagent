@@ -31,6 +31,12 @@ Hàng chờ nằm trong RAM: PrimeAgent restart thì mất job đang chờ, như
 - **Lượt fulfill**: lọc theo nền tảng, nhà cung cấp, ngày, trạng thái AI, mã đơn → xem file in / mockup /
   đơn / ticket → bấm **Phân tích** (một hoặc nhiều lượt). Đi đúng luồng thật nên kết quả lưu về đơn.
 - Đổi chế độ Thủ công / Tự động cho Etsy, TikTok ngay trên trang.
+- **Nạp key miraiapi**: tab Cài đặt AI → chọn file `.txt` nhà bán gửi (hoặc dán mã `MR-…`) → *Kích hoạt & dùng key*.
+  Agent tự đổi mã lấy key, đặt Base URL `https://api.miraiapi.com` + model `claude-opus-5.5`, hiện hạn dùng
+  và quota còn lại. Key hết hạn ⇒ lượt phân tích báo rõ "nạp mã mới". Chỉ admin.
+  ⚠️ miraiapi tính token theo **dung lượng base64 của ảnh** (ảnh 1568px ≈ 800k token) ⇒ qua gateway ảnh tự thu
+  nhỏ còn `gateway_image_px` (mặc định 512) + JPEG, ≈ 15–30k token/ảnh. Cloudflare của gateway cắt request
+  > ~100s (524) nên provider luôn dùng streaming.
 - Chạy local qua http: đặt `AGENT_DEV=1` (cookie phiên không bật Secure).
 
 ## Cài đặt
