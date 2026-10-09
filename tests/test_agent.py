@@ -636,3 +636,14 @@ def test_ui_resolve_chuyen_tiep(ui):
     assert be.calls[-1][1] == "/api/agent/fulfillments/9/resolve" and be.calls[-1][3]["json"] == {"note": "ok rồi"}
     c.post("/ui/api/fulfillments/9/resolve", json={"undo": True}, headers=H)
     assert be.calls[-1][3]["json"] == {"undo": True}
+
+
+def test_bo_chu_rac_ngoai_chuoi_json():
+    from app.providers.base import parse_json_loose
+    # gặp thật #840 qua gateway: rác "buffering噪?" chen giữa ngoặc
+    bad = ('{"items":[{"index":1,"checks":{"ticket":{"status":"ok","reason":"đã xoá \'They Missed One\'"},'
+           '"print_side":{"status":"ok","reason":"đủ 2 mặt; allowed_areas null"}} buffering噪?}],'
+           '"summary":"khớp đơn", "n": 12, "flag": true}')
+    d = parse_json_loose(bad)
+    assert d["items"][0]["checks"]["ticket"]["status"] == "ok" and d["summary"] == "khớp đơn"
+    assert d["n"] == 12 and d["flag"] is True

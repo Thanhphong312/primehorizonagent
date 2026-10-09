@@ -68,7 +68,36 @@ def repair_json(t: str) -> str:
                 in_str = True
             out.append(ch)
         i += 1
-    return _balance(re.sub(r",\s*([}\]])", r"\1", "".join(out)))
+    return _balance(re.sub(r",\s*([}\]])", r"\1", _drop_garbage("".join(out))))
+
+
+_LITERAL = __import__("re").compile(r"^(true|false|null|-?\d+(\.\d+)?([eE][+-]?\d+)?)$")
+
+
+def _drop_garbage(t: str) -> str:
+    """Bỏ chữ rác NGOÀI chuỗi JSON (gặp thật qua gateway: ``…}} buffering噪?}]``); giữ true/false/null/số."""
+    import re
+
+    out: list[str] = []
+    i, n = 0, len(t)
+    while i < n:
+        if t[i] == '"':                       # nguyên chuỗi (đã escape đúng ở bước trước)
+            j = i + 1
+            while j < n and t[j] != '"':
+                j += 2 if t[j] == "\\" else 1
+            out.append(t[i:j + 1])
+            i = j + 1
+            continue
+        m = re.match(r'[^\s{}\[\],:"]+', t[i:])
+        if m:
+            tok = m.group(0)
+            if _LITERAL.match(tok):
+                out.append(tok)
+            i += len(tok)
+            continue
+        out.append(t[i])
+        i += 1
+    return "".join(out)
 
 
 def _balance(t: str) -> str:
