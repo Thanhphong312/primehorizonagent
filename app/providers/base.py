@@ -32,6 +32,45 @@ def schema_instruction(schema: dict[str, Any]) -> str:
             "đúng tên khoá theo JSON Schema sau:\n" + json.dumps(schema, ensure_ascii=False))
 
 
+def repair_json(t: str) -> str:
+    """Sửa lỗi hay gặp khi model tự viết JSON (không có structured output):
+    nháy kép không escape trong chuỗi (vd chữ in "Mom"), xuống dòng thô trong chuỗi, dấu phẩy thừa."""
+    import re
+
+    out: list[str] = []
+    in_str = False
+    i, n = 0, len(t)
+    while i < n:
+        ch = t[i]
+        if in_str:
+            if ch == "\\" and i + 1 < n:
+                out.append(t[i:i + 2])
+                i += 2
+                continue
+            if ch == '"':
+                j = i + 1
+                while j < n and t[j] in " \t\r\n":
+                    j += 1
+                # nháy ĐÓNG chuỗi khi theo sau là , } ] : hoặc hết chuỗi; còn lại là nháy NẰM TRONG chuỗi
+                if j >= n or t[j] in ",}]:":
+                    in_str = False
+                    out.append(ch)
+                else:
+                    out.append('\\"')
+            elif ch == "\n":
+                out.append("\\n")
+            elif ch == "\r":
+                pass
+            else:
+                out.append(ch)
+        else:
+            if ch == '"':
+                in_str = True
+            out.append(ch)
+        i += 1
+    return re.sub(r",\s*([}\]])", r"\1", "".join(out))
+
+
 def parse_json_loose(text: str) -> dict[str, Any]:
     """JSON có thể bọc ```json … ``` hoặc kèm chữ trước/sau ⇒ lấy object ngoài cùng."""
     import json
@@ -40,13 +79,13 @@ def parse_json_loose(text: str) -> dict[str, Any]:
     if t.startswith("```"):
         t = t.split("\n", 1)[1] if "\n" in t else t
         t = t.rsplit("```", 1)[0]
+    a, b = t.find("{"), t.rfind("}")
+    if a >= 0 and b > a:
+        t = t[a:b + 1]
     try:
         data = json.loads(t)
     except json.JSONDecodeError:
-        a, b = t.find("{"), t.rfind("}")
-        if a < 0 or b <= a:
-            raise
-        data = json.loads(t[a:b + 1])
+        data = json.loads(repair_json(t))
     if not isinstance(data, dict):
         raise json.JSONDecodeError("không phải object", t, 0)
     return data

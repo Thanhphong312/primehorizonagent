@@ -569,3 +569,30 @@ def test_loi_401_mirai_bao_nap_ma_moi(tmp_path):
            loader=lambda *a, **k: IMG).process(812)
     err = c.posted[0][1]["error"]
     assert "nạp mã redeem mới" in err and "Invalid token" in err
+
+
+def test_sua_json_nhay_kep_trong_chuoi():
+    from app.providers.base import parse_json_loose
+    bad = '{"items":[{"index":1,"checks":{"design":{"status":"error","reason":"File in ghi "Mom" nhưng đơn là "Mommy"","x":1}}}],"summary":"Sai tên\nkhách",}'
+    d = parse_json_loose(bad)
+    assert d["items"][0]["checks"]["design"]["reason"] == 'File in ghi "Mom" nhưng đơn là "Mommy"'
+    assert d["summary"] == "Sai tên\nkhách"
+
+
+def test_json_hong_qua_gateway_goi_sua_rieng():
+    good = '{"items": [{"index": 1, "checks": {}}], "summary": "đã sửa"}'
+
+    class C(FakeAnthropic):
+        def __init__(self):
+            super().__init__(_anthropic_resp(text='{"items": [ {{{ hỏng'))
+            self.n = 0
+
+        def _stream(self, **kw):
+            self.n += 1
+            if self.n == 2:
+                self.resp = _anthropic_resp(text=good)
+                assert all(isinstance(m["content"], str) for m in kw["messages"])   # lần sửa: chỉ chữ, không ảnh
+            return super()._stream(**kw)
+    c = C()
+    r = AnthropicProvider(settings(anthropic_base_url="https://gw"), client=c).analyze("s", [], {"type": "object"})
+    assert r.data["summary"] == "đã sửa" and c.n == 2

@@ -36,6 +36,22 @@ class AnthropicProvider:
                 out.append({"type": "text", "text": p.text})
         return out
 
+    def _fix_json(self, text: str, schema: dict[str, Any], err: Exception) -> dict[str, Any]:
+        """Tự sửa không được ⇒ gửi RIÊNG đoạn chữ hỏng (không ảnh, ~vài nghìn token) để model viết lại cho đúng."""
+        try:
+            with self.client.beta.messages.stream(
+                model=self.settings.anthropic_model, max_tokens=8000,
+                system="Sửa đoạn sau thành JSON hợp lệ, giữ nguyên nội dung, escape nháy kép trong chuỗi."
+                       + schema_instruction(schema),
+                messages=[{"role": "user", "content": text}],
+            ) as stream:
+                resp = stream.get_final_message()
+            fixed = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+            return parse_json_loose(fixed)
+        except Exception as exc2:  # noqa: BLE001
+            raise ProviderError(f"AI trả JSON không hợp lệ: {err} — sửa lại cũng lỗi ({type(exc2).__name__}). "
+                                f"Trả lời gốc: {text[:1500]}") from exc2
+
     def analyze(self, system: str, parts: list[Part], schema: dict[str, Any]) -> ProviderResult:
         gateway = bool(getattr(self.settings, "anthropic_base_url", ""))
         extra: dict[str, Any] = {}
@@ -67,7 +83,9 @@ class AnthropicProvider:
         try:
             data = parse_json_loose(text) if gateway else json.loads(text)
         except json.JSONDecodeError as exc:
-            raise ProviderError(f"AI trả JSON không hợp lệ: {exc}") from exc
+            if not gateway:
+                raise ProviderError(f"AI trả JSON không hợp lệ: {exc}") from exc
+            data = self._fix_json(text, schema, exc)
         if gateway:
             check_result_shape(data)
         usage = getattr(resp, "usage", None)
