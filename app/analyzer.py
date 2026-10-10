@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Any
 
-from app import schema
+from app import garment, schema
 from app.images import ImageLoadError, load_image
 from app.providers.base import Part, Provider, ProviderError
 from app.rules import run_rules
@@ -124,17 +124,25 @@ def analyze(bundle: dict[str, Any], provider: Provider, settings, *, loader=load
     img_kw: dict[str, Any] = {"max_px": settings.image_max_px}
     if base_url and settings.gateway_image_px:
         img_kw = {"max_px": min(settings.image_max_px, settings.gateway_image_px), "jpeg_only": True}
+    # File thiết kế của các item là ÁO đã biết màu ⇒ đo màu phần có in ngay lúc giải nén (không tải lại).
+    contrast_urls = {d.get("url") for it in bundle.get("sent_items") or [] if garment.garment_of(it)
+                     for d in it.get("designs") or [] if d.get("url")}
+    design_stats: dict[str, Any] = {}
     for url, desc in plan[: settings.max_images]:
+        kw = dict(img_kw, inspect=garment.design_colors) if url in contrast_urls else img_kw
         try:
             img = loader(url, max_bytes=settings.max_download_mb * 1024 * 1024, timeout=settings.http_timeout,
-                         **img_kw)
+                         **kw)
         except ImageLoadError as exc:
             failed.append({"url": url, "desc": desc, "error": str(exc)})
             continue
+        if getattr(img, "stats", None):
+            design_stats[url] = img.stats
         n = len(parts_images) + 1
         labels[url] = f"[Ảnh #{n}]"
         parts_images.append(Part(text=f"[Ảnh #{n}] {desc}"))
         parts_images.append(Part(image=img))
+    findings += garment.contrast_findings(bundle.get("sent_items") or [], design_stats)
     if failed:
         findings.append({"index": None, "check": "general", "status": "warn",
                          "reason": f"{len(failed)} ảnh không tải được — AI kiểm thiếu dữ liệu"})

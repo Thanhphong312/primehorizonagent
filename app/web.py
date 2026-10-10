@@ -166,6 +166,39 @@ def test_settings():
     return jsonify(ok=True, data=check_key(_cfg("STORE").effective(_cfg("SETTINGS"))))
 
 
+@ui_bp.get("/ui/api/prompt")
+@login_required()
+def get_prompt():
+    """Prompt đang dùng (chỉ xem) — để người dùng biết AI được dặn chấm thế nào."""
+    from app import analyzer, garment, schema
+    from app.providers.base import schema_instruction
+
+    eff = _cfg("STORE").effective(_cfg("SETTINGS"))
+    base_url = eff.openai_base_url if eff.ai_provider == "openai" else eff.anthropic_base_url
+    code_checks = [
+        "Payload không có item nào ⇒ lỗi; item không có file thiết kế ⇒ lỗi; số lượng ≤ 0 ⇒ lỗi.",
+        "File in trùng link ảnh mockup ⇒ lỗi; link file in trông như ảnh mockup/listing ⇒ cảnh báo.",
+        "Mặt in không thuộc danh sách mặt in của sku (nếu tra được) ⇒ lỗi.",
+        "Không tra được sku trong catalog (Sellerwix, SimplePrint, Printbelle, BullStart, Anprint) ⇒ cảnh báo.",
+        "Hai item trùng hoàn toàn (cùng sku + file) ⇒ cảnh báo; tổng số lượng gửi ≠ tổng số lượng đơn ⇒ cảnh báo.",
+        f"Màu thiết kế trùng màu áo (chỉ dòng áo, file in nền trong suốt): ≥ {round(garment.WARN_SHARE * 100)}% "
+        f"phần có in gần màu áo (ΔE < {garment.NEAR_DE:g}) ⇒ cảnh báo \"in ra dễ bị chìm\". "
+        f"Biết {len(garment.COLOR_HEX)} tên màu áo.",
+    ]
+    return jsonify(ok=True, data={
+        "system": analyzer.SYSTEM_PROMPT + (schema_instruction(schema.AI_RESULT_SCHEMA) if base_url else ""),
+        "final": analyzer._final_instruction({"sent_items": [{"index": 1}, {"index": 2}]}),
+        "user_layout": ["DỮ LIỆU LƯỢT FULFILL (JSON): đơn của khách, item đã gửi (sku, decoded, file in theo mặt, "
+                        "mockup), ticket — link ảnh thay bằng nhãn [Ảnh #n]",
+                        "Phát hiện của bước kiểm bằng code (đã chắc chắn, không cần chấm lại)",
+                        "Các ảnh: [Ảnh #n] + mô tả (mockup, file thiết kế, ảnh đơn, ảnh ticket)",
+                        "Câu chốt (ví dụ 2 item) ↓"],
+        "code_checks": code_checks,
+        "model": eff.openai_model if eff.ai_provider == "openai" else eff.anthropic_model,
+        "gateway": bool(base_url),
+    })
+
+
 def _meta() -> mirai.Meta:
     return mirai.Meta(_cfg("STORE").dir)
 

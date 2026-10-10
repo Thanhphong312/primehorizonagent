@@ -647,3 +647,72 @@ def test_bo_chu_rac_ngoai_chuoi_json():
     d = parse_json_loose(bad)
     assert d["items"][0]["checks"]["ticket"]["status"] == "ok" and d["summary"] == "khớp đơn"
     assert d["n"] == 12 and d["flag"] is True
+
+
+# ─────────────── màu thiết kế trùng màu áo (app.garment) ───────────────
+
+def _png(fg, share, transparent=True):
+    """Ảnh 100×100: ``share`` phần có in màu ``fg``, phần in còn lại màu trắng; nền trong suốt (hoặc đặc)."""
+    from PIL import Image
+    img = Image.new("RGBA", (100, 100), (0, 0, 0, 0) if transparent else (255, 255, 255, 255))
+    rows = int(50 * share)
+    for y in range(50):
+        for x in range(100):
+            img.putpixel((x, y), (*fg, 255) if y < rows else (255, 255, 255, 255))
+    return img
+
+
+def test_garment_of_chi_ap_dung_cho_ao():
+    from app import garment
+    tee = {"sku": "C1717-Black-2XL", "decoded": {"product": "Comfort Colors 1717 T-Shirt", "color": "Black"}}
+    assert garment.garment_of(tee)[0] == "black"
+    assert garment.garment_of({"sku": "G500_SPORT_GREY_L", "decoded": None})[0] == "sport grey"
+    assert garment.garment_of({"sku": "X", "decoded": {"product": "Hoodie 18500", "color": "Heather Navy"}})[0] \
+        == "heather navy"
+    assert garment.garment_of({"sku": "MUG11-Black", "decoded": {"product": "Black Mug 11oz", "color": "Black"}}) is None
+    assert garment.garment_of({"sku": "IP17-STD-MS", "decoded": {"product": "Iphone 17 PhoneCase"}}) is None
+    assert garment.garment_of({"sku": "C1717-Rainbow-L", "decoded": {"product": "T-Shirt", "color": "Rainbow"}}) is None
+
+
+def test_near_share_do_phan_trung_mau():
+    from app import garment
+    black = garment.lookup_color("Black")[1]
+    s = garment.design_colors(_png((30, 30, 30), 0.6))
+    assert s["transparent"] and abs(garment.near_share(s, black) - 0.6) < 0.05
+    assert garment.near_share(garment.design_colors(_png((255, 0, 0), 1.0)), black) == 0
+    # nền đặc ⇒ không tách được hình in ⇒ không đo
+    assert garment.near_share(garment.design_colors(_png((30, 30, 30), 1.0, transparent=False)), black) is None
+
+
+def test_analyze_canh_bao_thiet_ke_chim_mau_ao():
+    import base64, io
+    from app.images import _encode
+    buf = io.BytesIO(); _png((20, 22, 25), 0.8).save(buf, format="PNG"); raw = buf.getvalue()
+    b = bundle()
+    b["sent_items"][0]["sku"] = "C1717-Black-L"
+    b["sent_items"][0]["decoded"] = {"product": "Comfort Colors 1717 T-Shirt", "color": "Black", "size": "L"}
+    design_url = b["sent_items"][0]["designs"][0]["url"]
+
+    def loader(url, **k):
+        return _encode(url, raw, max_px=k["max_px"], jpeg_only=k.get("jpeg_only", False), inspect=k.get("inspect"))
+
+    p = FakeProvider({"items": [{"index": 1, "checks": ok_checks()}], "summary": ""})
+    out = analyze(b, p, settings(), loader=loader)
+    hits = [f for f in out["rule_findings"] if "chìm" in f["reason"]]
+    assert len(hits) == 1 and hits[0]["index"] == 1 and "Black" in hits[0]["reason"]
+    assert out["status_code"] == schema.WARN
+    # áo trắng ⇒ không cảnh báo
+    b["sent_items"][0]["decoded"]["color"] = "White"
+    out = analyze(b, p, settings(), loader=loader)
+    assert not [f for f in out["rule_findings"] if "chìm" in f["reason"]]
+    assert design_url
+
+
+def test_ui_xem_prompt(ui):
+    c, be = ui
+    assert c.get("/ui/api/prompt").status_code == 401
+    be.role = "fulfill"
+    _login(c)
+    d = c.get("/ui/api/prompt").get_json()["data"]
+    assert "Bạn là nhân viên QC" in d["system"] and "ĐÚNG 2 phần tử" in d["final"]
+    assert any("chìm" in x for x in d["code_checks"])

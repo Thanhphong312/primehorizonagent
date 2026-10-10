@@ -181,6 +181,10 @@ dialog::backdrop { background: rgba(0,0,0,.55); }
           <span class="small muted">Ô key để trống = giữ key cũ. Lưu xong có hiệu lực ngay cho lượt phân tích tiếp theo. Chỉ admin được sửa.</span>
         </div>
       </form>
+      <div class="panel" id="promptPanel">
+        <h3 style="margin-top:0">Prompt hiện tại (chỉ xem)</h3>
+        <div id="promptBody" class="small muted">Đang tải…</div>
+      </div>
     </section>
   </main>
 </div>
@@ -233,7 +237,7 @@ document.querySelectorAll('nav button').forEach((b) => b.onclick = () => {
   document.querySelectorAll('nav button').forEach((x) => x.classList.toggle('on', x === b));
   $('#tab-ful').classList.toggle('hidden', b.dataset.tab !== 'ful');
   $('#tab-set').classList.toggle('hidden', b.dataset.tab !== 'set');
-  if (b.dataset.tab === 'set') loadSettings();
+  if (b.dataset.tab === 'set') { loadSettings(); loadPrompt(); }
 });
 
 // ── trạng thái AI trên header ──
@@ -414,12 +418,24 @@ async function loadSettings() {
     $('#redeemPanel').querySelectorAll('input, textarea, button').forEach((el) => el.disabled = !isAdmin);
   } catch (e) { flash($('#setMsg'), e.message); }
 }
+async function loadPrompt() {
+  try {
+    const p = (await api('/ui/api/prompt')).data;
+    const pre = (t) => `<pre class="mono" style="white-space:pre-wrap;max-height:480px;overflow:auto;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:10px;margin:6px 0 12px">${esc(t)}</pre>`;
+    $('#promptBody').classList.remove('muted');
+    $('#promptBody').innerHTML =
+      `<div class="muted">Model: <span class="mono">${esc(p.model || '—')}</span>${p.gateway ? ' · qua gateway (schema JSON ghi kèm trong prompt)' : ''}</div>` +
+      `<h4>1. Kiểm bằng code (trước khi gọi AI, không tốn token)</h4><ul>${p.code_checks.map((c) => `<li>${esc(c)}</li>`).join('')}</ul>` +
+      `<h4>2. System prompt gửi AI</h4>${pre(p.system)}` +
+      `<h4>3. Nội dung mỗi lượt gửi AI</h4><ol>${p.user_layout.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>${pre(p.final)}`;
+  } catch (e) { $('#promptBody').innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
 $('#setForm').onsubmit = async (e) => {
   e.preventDefault();
   const f = e.target, body = { ai_provider: f.querySelector('input[name=ai_provider]:checked')?.value };
   for (const k of ['anthropic_model', 'anthropic_effort', 'anthropic_base_url', 'openai_model', 'openai_base_url', 'image_max_px', 'max_images', 'gateway_image_px']) body[k] = f.elements[k].value;
   for (const k of ['anthropic_api_key', 'openai_api_key']) if (f.elements[k].value.trim()) body[k] = f.elements[k].value.trim();
-  try { await api('/ui/api/settings', { method: 'PUT', body }); flash($('#setMsg'), 'Đã lưu — có hiệu lực ngay cho lượt phân tích tiếp theo.', true); loadSettings(); loadState(); }
+  try { await api('/ui/api/settings', { method: 'PUT', body }); flash($('#setMsg'), 'Đã lưu — có hiệu lực ngay cho lượt phân tích tiếp theo.', true); loadSettings(); loadPrompt(); loadState(); }
   catch (err) { flash($('#setMsg'), err.message); }
 };
 $('#testBtn').onclick = async () => {

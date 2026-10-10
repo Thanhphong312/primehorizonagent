@@ -44,6 +44,7 @@ class LoadedImage:
     data_b64: str
     width: int
     height: int
+    stats: dict | None = None      # kết quả ``inspect`` (vd màu phần có in — app.garment.design_colors)
 
 
 class ImageLoadError(Exception):
@@ -51,7 +52,7 @@ class ImageLoadError(Exception):
 
 
 def load_image(url: str, *, max_px: int, max_bytes: int, timeout: int,
-               session: requests.Session | None = None, jpeg_only: bool = False) -> LoadedImage:
+               session: requests.Session | None = None, jpeg_only: bool = False, inspect=None) -> LoadedImage:
     """``jpeg_only``: luôn nén JPEG (nền trong suốt ⇒ nền xám nhạt) — cho gateway tính tiền theo dung lượng ảnh."""
     src = drive_thumbnail(url, max_px)
     http = session or requests
@@ -69,10 +70,10 @@ def load_image(url: str, *, max_px: int, max_bytes: int, timeout: int,
     raw = buf.getvalue()
     del buf
     with _DECODE_LOCK:
-        return _encode(url, raw, max_px=max_px, jpeg_only=jpeg_only)
+        return _encode(url, raw, max_px=max_px, jpeg_only=jpeg_only, inspect=inspect)
 
 
-def _encode(url: str, raw: bytes, *, max_px: int, jpeg_only: bool) -> LoadedImage:
+def _encode(url: str, raw: bytes, *, max_px: int, jpeg_only: bool, inspect=None) -> LoadedImage:
     try:
         img = Image.open(io.BytesIO(raw))
         if img.width * img.height > MAX_PIXELS:
@@ -85,6 +86,13 @@ def _encode(url: str, raw: bytes, *, max_px: int, jpeg_only: bool) -> LoadedImag
         raise
     except Exception as exc:  # noqa: BLE001 — mọi lỗi decode đều là "không phải ảnh"
         raise ImageLoadError(f"File không phải ảnh hợp lệ: {exc}") from exc
+
+    stats = None
+    if inspect is not None:
+        try:
+            stats = inspect(img)            # đo trên ảnh gốc (còn nền trong suốt), trước khi nén cho AI
+        except Exception:  # noqa: BLE001 — đo phụ lỗi không được làm hỏng lượt phân tích
+            logger.exception("inspect ảnh %s", url)
 
     out = io.BytesIO()
     # PNG giữ nền trong suốt của file thiết kế (nền trong suốt quyết định "in gì");
@@ -105,4 +113,4 @@ def _encode(url: str, raw: bytes, *, max_px: int, jpeg_only: bool) -> LoadedImag
         img.convert("RGB").save(out, format="JPEG", quality=85)
         media = "image/jpeg"
     return LoadedImage(url=url, media_type=media, data_b64=base64.standard_b64encode(out.getvalue()).decode(),
-                       width=img.width, height=img.height)
+                       width=img.width, height=img.height, stats=stats)
