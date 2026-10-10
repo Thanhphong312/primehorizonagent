@@ -73,12 +73,17 @@ def lookup_color(name: str | None) -> tuple[str, tuple[int, int, int]] | None:
     return (best, _rgb(COLOR_HEX[best])) if best else None
 
 
-def garment_of(item: dict[str, Any]) -> tuple[str, tuple[int, int, int]] | None:
-    """Màu áo của một item đã gửi, hoặc None nếu không phải áo / không biết màu."""
+def is_apparel(item: dict[str, Any]) -> bool:
     dec = item.get("decoded") or {}
     text = " ".join(str(x) for x in (dec.get("product"), dec.get("variant_title"), dec.get("category"),
                                      item.get("sku")) if x)
-    if _NON_APPAREL_RE.search(text) or not _APPAREL_RE.search(text):
+    return bool(_APPAREL_RE.search(text)) and not _NON_APPAREL_RE.search(text)
+
+
+def garment_of(item: dict[str, Any]) -> tuple[str, tuple[int, int, int]] | None:
+    """Màu áo của một item đã gửi, hoặc None nếu không phải áo / không biết màu."""
+    dec = item.get("decoded") or {}
+    if not is_apparel(item):
         return None
     if dec.get("color"):
         return lookup_color(str(dec["color"]))
@@ -158,4 +163,55 @@ def contrast_findings(sent_items: list[dict[str, Any]], stats_by_url: dict[str, 
                 out.append({"index": it.get("index"), "check": "design", "status": "warn",
                             "reason": f"File in mặt {d.get('area')}: ~{round(share * 100)}% hình in gần trùng màu "
                                       f"áo {name.title()} — in ra dễ bị chìm, kiểm tra lại màu thiết kế / màu áo"})
+    return out
+
+
+# ─────────────────────────── size áo: gửi đi phải đúng size khách đặt ───────────────────────────
+
+_SIZE_ALIASES = {
+    "xs": "XS", "xsmall": "XS", "extrasmall": "XS", "s": "S", "small": "S", "m": "M", "medium": "M",
+    "l": "L", "large": "L", "xl": "XL", "xlarge": "XL", "extralarge": "XL", "1x": "XL",
+    "2xl": "2XL", "xxl": "2XL", "2x": "2XL", "xxlarge": "2XL", "2xlarge": "2XL",
+    "3xl": "3XL", "xxxl": "3XL", "3x": "3XL", "xxxlarge": "3XL", "3xlarge": "3XL",
+    "4xl": "4XL", "xxxxl": "4XL", "4x": "4XL", "5xl": "5XL", "5x": "5XL", "6xl": "6XL",
+}
+
+
+def norm_size(text: str | None) -> str | None:
+    """"Comfort Tshirt L US letter" → "L", "2XL" → "2XL", "X-Large" → "XL". Không có / nhiều hơn 1 size ⇒ None."""
+    t = (text or "").lower().replace("x-large", "xlarge").replace("extra large", "extralarge") \
+        .replace("extra small", "extrasmall").replace("x-small", "xsmall")
+    found = {_SIZE_ALIASES[w] for w in re.split(r"[^a-z0-9]+", t) if w in _SIZE_ALIASES}
+    return found.pop() if len(found) == 1 else None
+
+
+def size_findings(sent_items: list[dict[str, Any]], order_items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Mỗi size áo: số áo GỬI ĐI không được vượt số áo KHÁCH ĐẶT size đó ⇒ vượt = gửi sai size (lỗi chắc chắn).
+
+    So theo số lượng từng size (không ghép từng dòng) nên đúng cả khi lượt fulfill chỉ gửi một phần đơn.
+    Chỉ chạy khi mọi item áo đã gửi đều đọc được size (sku đã tra) và đơn có size đọc được.
+    """
+    sent = [(it, norm_size(str((it.get("decoded") or {}).get("size") or ""))) for it in sent_items if is_apparel(it)]
+    if not sent or any(sz is None for _, sz in sent):
+        return []
+    ordered: dict[str, int] = {}
+    for it in order_items:
+        sz = norm_size(str(it.get("size") or ""))
+        if sz:
+            ordered[sz] = ordered.get(sz, 0) + int(it.get("quantity") or 0)
+    if not ordered:
+        return []
+    sent_qty: dict[str, list] = {}
+    for it, sz in sent:
+        sent_qty.setdefault(sz, []).append(it)
+    out = []
+    order_txt = ", ".join(f"{k}×{v}" for k, v in sorted(ordered.items()))
+    for sz, items in sent_qty.items():
+        qty = sum(int(i.get("quantity") or 0) for i in items)
+        if qty > ordered.get(sz, 0):
+            idx = ", ".join(f"#{i.get('index')}" for i in items)
+            out.append({"index": items[-1].get("index") if len(items) == 1 else None, "check": "product_color",
+                        "status": "error",
+                        "reason": f"Sai size: gửi {qty} áo size {sz} (item {idx}) nhưng đơn chỉ đặt "
+                                  f"{ordered.get(sz, 0)} áo size {sz} — size khách đặt: {order_txt}"})
     return out

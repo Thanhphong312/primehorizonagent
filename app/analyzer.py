@@ -30,7 +30,7 @@ kiểu áo). Size trên Etsy thường ghi kèm loại áo (vd "Comfort Tshirt 2
 Mã kiểu Gildan hay gặp: 5000/64000/3001/1717 = áo thun, 18000 = sweatshirt, 18500 = hoodie. \
 ⚠️ KHÔNG dùng ảnh mockup / ảnh listing để kết luận loại áo hay màu: shop thường dùng CHUNG một mockup (vd áo thun \
 trắng) cho mọi biến thể của listing, nên mockup khác loại / khác màu với đơn là BÌNH THƯỜNG. Màu gần nghĩa (vd \
-"Sand" ~ "Tan") là warn, khác hẳn là error.
+"Sand" ~ "Tan") là warn, khác hẳn là error. SIZE khác size khách đặt (vd đơn L mà sku M) là error, không phải warn.
 2. design — file thiết kế có đúng mẫu so với mockup/ảnh đơn không: cùng HÌNH IN, cùng chữ (bỏ qua loại áo / màu \
 áo trên mockup). Khác mockup đúng ở chỗ ticket yêu cầu sửa (vd đã xoá dòng chữ theo ticket) ⇒ vẫn ok; nội dung cá nhân hoá \
 (tên, năm, chữ…) phải xuất hiện ĐÚNG CHÍNH TẢ trong file thiết kế. File thiết kế là hình in phẳng (thường nền \

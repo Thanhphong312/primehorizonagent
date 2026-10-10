@@ -179,6 +179,7 @@ def get_prompt():
         "Payload không có item nào ⇒ lỗi; item không có file thiết kế ⇒ lỗi; số lượng ≤ 0 ⇒ lỗi.",
         "File in trùng link ảnh mockup ⇒ lỗi; link file in trông như ảnh mockup/listing ⇒ cảnh báo.",
         "Mặt in không thuộc danh sách mặt in của sku (nếu tra được) ⇒ lỗi.",
+        "Sai size áo: số áo gửi đi của một size vượt số áo khách đặt size đó (vd đơn L + M mà gửi M + M) ⇒ lỗi.",
         "Không tra được sku trong catalog (Sellerwix, SimplePrint, Printbelle, BullStart, Anprint) ⇒ cảnh báo.",
         "Hai item trùng hoàn toàn (cùng sku + file) ⇒ cảnh báo; tổng số lượng gửi ≠ tổng số lượng đơn ⇒ cảnh báo.",
         f"Màu thiết kế trùng màu áo (chỉ dòng áo, file in nền trong suốt): ≥ {round(garment.WARN_SHARE * 100)}% "

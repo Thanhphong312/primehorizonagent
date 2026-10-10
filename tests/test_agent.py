@@ -716,3 +716,30 @@ def test_ui_xem_prompt(ui):
     d = c.get("/ui/api/prompt").get_json()["data"]
     assert "Bạn là nhân viên QC" in d["system"] and "ĐÚNG 2 phần tử" in d["final"]
     assert any("chìm" in x for x in d["code_checks"])
+
+
+def test_norm_size():
+    from app.garment import norm_size
+    assert norm_size("Comfort Tshirt L US letter") == "L"
+    assert norm_size("Hoodie 2XL") == "2XL" and norm_size("XXL") == "2XL" and norm_size("X-Large") == "XL"
+    assert norm_size("Sweatshirt Crew S") == "S" and norm_size("11oz") is None and norm_size("S/M") is None
+
+
+def test_sai_size_la_loi():
+    """Lượt #875: đơn L + M (Sand) mà gửi 2 áo C1717 size M ⇒ lỗi, không chỉ cảnh báo."""
+    dec = {"product": "Comfort Colors 1717 (US) - Garment-Dyed Heavyweight T-Shirt (DTG)", "color": "Sandstone",
+           "size": "M", "matched": True}
+    b = bundle()
+    b["order"]["items"] = [{"index": 1, "size": "Comfort Tshirt L US letter", "color": "Sand", "quantity": 1},
+                           {"index": 2, "size": "Comfort Tshirt M US letter", "color": "Sand", "quantity": 1}]
+    b["sent_items"] = [{"index": i, "sku": "C1717-DTG-Sandstone-M-PF04", "quantity": 1, "decoded": dict(dec),
+                        "designs": [{"area": "front", "url": f"https://x/d{i}.png"}], "mockups": []} for i in (1, 2)]
+    f = [x for x in run_rules(b) if "Sai size" in x["reason"]]
+    assert len(f) == 1 and f[0]["status"] == "error" and "L×1, M×1" in f[0]["reason"]
+    assert schema.overall_code([], f) == schema.ERROR
+    # gửi đúng L + M ⇒ không báo
+    b["sent_items"][0]["decoded"]["size"] = "L"
+    assert not [x for x in run_rules(b) if "Sai size" in x["reason"]]
+    # gửi một phần đơn (chỉ áo M) ⇒ không báo
+    b["sent_items"] = b["sent_items"][1:]
+    assert not [x for x in run_rules(b) if "Sai size" in x["reason"]]

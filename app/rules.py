@@ -76,6 +76,9 @@ def run_rules(bundle: dict[str, Any]) -> list[dict[str, Any]]:
         else:
             seen[key] = idx
 
+    from app.garment import size_findings
+    out += size_findings(sent, order_items)
+
     # Lượt fulfill có thể chỉ gồm một phần đơn (tách nhiều nhà cung cấp, gửi lại 1 item…)
     # nên lệch tổng số lượng là CẢNH BÁO, không phải lỗi.
     sent_qty = sum(int(it.get("quantity") or 0) for it in sent)
