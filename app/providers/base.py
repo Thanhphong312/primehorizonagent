@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -160,13 +162,49 @@ def parse_json_loose(text: str) -> dict[str, Any]:
     return data
 
 
+_CHECK_KEYS = ("product_color", "design", "ticket", "print_side")
+
+
+def _norm_checks(it: dict[str, Any]) -> dict[str, Any] | None:
+    """Gateway không ép schema ⇒ model thỉnh thoảng lệch khuôn: checks dạng list, để phẳng ở item,
+    hoặc đặt tên khác. Gom về dict ``{key: {status, reason}}``; không nhận ra ⇒ None."""
+    raw = it.get("checks")
+    if raw is None:
+        raw = it.get("results") or it.get("check")
+    if isinstance(raw, list):
+        out = {}
+        for c in raw:
+            if isinstance(c, dict):
+                k = c.get("key") or c.get("name") or c.get("check") or c.get("type")
+                if k in _CHECK_KEYS:
+                    out[k] = {"status": c.get("status", "unknown"), "reason": c.get("reason", "")}
+        raw = out or None
+    if raw is None:
+        flat = {k: it[k] for k in _CHECK_KEYS if isinstance(it.get(k), dict)}
+        raw = flat or None
+    if not isinstance(raw, dict):
+        return None
+    for k, v in list(raw.items()):
+        if isinstance(v, str):                      # {"design": "ok"} ⇒ thiếu reason
+            raw[k] = {"status": v, "reason": ""}
+    return raw
+
+
 def check_result_shape(data: dict[str, Any]) -> None:
-    """Kiểm tra tối thiểu khi không có structured output ép schema."""
-    if not isinstance(data.get("items"), list) or not isinstance(data.get("summary", ""), str):
+    """Kiểm tra + nắn khuôn tối thiểu khi không có structured output ép schema (sửa ``data`` tại chỗ)."""
+    if not isinstance(data.get("items"), list) and isinstance(data.get("results"), list):
+        data["items"] = data.pop("results")
+    if not isinstance(data.get("summary", ""), str):
+        data["summary"] = str(data.get("summary"))
+    if not isinstance(data.get("items"), list):
         raise ProviderError("AI trả JSON sai khuôn (thiếu items/summary)")
     for it in data["items"]:
-        if not isinstance(it, dict) or not isinstance(it.get("checks"), dict):
-            raise ProviderError("AI trả JSON sai khuôn (item thiếu checks)")
+        checks = _norm_checks(it) if isinstance(it, dict) else None
+        if checks is None:
+            raise ProviderError("AI trả JSON sai khuôn (item thiếu checks): " + json.dumps(it, ensure_ascii=False)[:500])
+        it["checks"] = checks
+        if isinstance(it.get("index"), str) and it["index"].strip().isdigit():
+            it["index"] = int(it["index"])
 
 
 class ProviderError(Exception):

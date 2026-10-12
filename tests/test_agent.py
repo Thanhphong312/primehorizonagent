@@ -743,3 +743,26 @@ def test_sai_size_la_loi():
     # gửi một phần đơn (chỉ áo M) ⇒ không báo
     b["sent_items"] = b["sent_items"][1:]
     assert not [x for x in run_rules(b) if "Sai size" in x["reason"]]
+
+
+def test_check_result_shape_nan_khuon_lech():
+    from app.providers.base import ProviderError, check_result_shape
+
+    ck = {"status": "ok", "reason": "x"}
+    data = {"summary": "s", "items": [
+        {"index": "1", "product_color": ck, "design": ck, "ticket": ck, "print_side": ck},          # để phẳng
+        {"index": 2, "checks": [{"key": "design", "status": "warn", "reason": "y"}]},              # dạng list
+        {"index": 3, "checks": {"ticket": "ok"}},                                                    # thiếu reason
+    ]}
+    check_result_shape(data)
+    assert data["items"][0]["index"] == 1 and data["items"][0]["checks"]["design"] == ck
+    assert data["items"][1]["checks"] == {"design": {"status": "warn", "reason": "y"}}
+    assert data["items"][2]["checks"] == {"ticket": {"status": "ok", "reason": ""}}
+    with pytest.raises(ProviderError):
+        check_result_shape({"summary": "", "items": [{"index": 1, "note": "?"}]})
+
+
+def test_prompt_greeting_card_mau_phong_bi():
+    from app.analyzer import SYSTEM_PROMPT
+
+    assert "GREETING CARD" in SYSTEM_PROMPT and "PHONG BÌ" in SYSTEM_PROMPT

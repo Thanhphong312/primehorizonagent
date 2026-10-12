@@ -87,7 +87,12 @@ class AnthropicProvider:
                 raise ProviderError(f"AI trả JSON không hợp lệ: {exc}") from exc
             data = self._fix_json(text, schema, exc)
         if gateway:
-            check_result_shape(data)
+            try:
+                check_result_shape(data)
+            except ProviderError as exc:
+                # Lệch khuôn mà nắn không được ⇒ nhờ model viết lại theo đúng schema (chỉ phần chữ, rẻ)
+                data = self._fix_json(text, schema, exc)
+                check_result_shape(data)
         usage = getattr(resp, "usage", None)
         return ProviderResult(
             data=data,
